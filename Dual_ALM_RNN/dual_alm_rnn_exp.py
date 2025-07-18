@@ -72,10 +72,13 @@ class DualALMRNNExp(object):
         self.init_sub_path(self.configs['train_type'])
 
 
+        logs_save_path = os.path.join(self.configs['logs_dir'], self.configs['model_type'], self.sub_path)
+        self.logs_save_path = logs_save_path
+
     def init_sub_path(self, train_type):
 
         self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
-            'n_epochs_{}'.format(self.configs['n_epochs']),\
+            'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
             'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
             'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
             'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
@@ -386,6 +389,12 @@ class DualALMRNNExp(object):
         all_epoch_val_losses = []
         all_epoch_val_scores = []
 
+        # Separate lists for across-hemi training
+        all_across_train_losses = []
+        all_across_train_scores = []
+        all_across_val_losses = []
+        all_across_val_scores = []
+
         best_val_score = float('-inf')
 
         for epoch in range(self.configs['n_epochs']):
@@ -458,7 +467,8 @@ class DualALMRNNExp(object):
         model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
 
 
-        logs_save_path = os.path.join(self.configs['logs_dir'], model_type, self.sub_path)
+        logs_save_path = os.path.join(self.configs['logs_dir'], self.configs['model_type'], self.sub_path)
+        self.logs_save_path = logs_save_path
 
         os.makedirs(model_save_path, exist_ok=True)
         os.makedirs(logs_save_path, exist_ok=True)
@@ -533,6 +543,7 @@ class DualALMRNNExp(object):
 
 
         optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
 
 
         loss_fct = nn.BCEWithLogitsLoss()
@@ -550,6 +561,12 @@ class DualALMRNNExp(object):
         all_epoch_train_scores = []
         all_epoch_val_losses = []
         all_epoch_val_scores = []
+
+        # Separate lists for across-hemi training
+        all_across_train_losses = []
+        all_across_train_scores = []
+        all_across_val_losses = []
+        all_across_val_scores = []
 
         best_val_score = float('-inf')
 
@@ -598,14 +615,85 @@ class DualALMRNNExp(object):
             np.save(os.path.join(logs_save_path, 'all_epoch_val_losses.npy'), C)
             np.save(os.path.join(logs_save_path, 'all_epoch_val_scores.npy'), D)
 
+            # Track weights after each epoch
+            self.track_weights(model, epoch, 'within_hemi', logs_save_path)
+
             epoch_end_time = time.time()
 
             print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
 
+        for epoch in range(self.configs['across_hemi_n_epochs']):
+            epoch_begin_time = time.time()
+
+
+            print('')
+            print('Across-hemi training')
+
+            # Optionally, you can set a different uni_pert_trials_prob or other config here if needed
+            model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+
+            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_cross_hemi, epoch, loss_fct)
+            val_loss, val_score = self.val_helper(model, device, val_loader, loss_fct)
+
+            # Save best model if desired, or log as needed
+            if val_score > best_val_score:
+                best_val_score = val_score
+                model_save_name = 'best_model_across_hemi.pth'
+                torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))
+
+            all_across_train_losses.extend(train_losses)
+            all_across_train_scores.extend(train_scores)
+            all_across_val_losses.append(val_loss)
+            all_across_val_scores.append(val_score)
+
+            A_across = np.array([to_float(t) for t in all_across_train_losses])
+            B_across = np.array([to_float(t) for t in all_across_train_scores])
+            C_across = np.array([to_float(t) for t in all_across_val_losses])
+            D_across = np.array([to_float(t) for t in all_across_val_scores])
+
+            np.save(os.path.join(logs_save_path, 'all_across_train_losses.npy'), A_across)
+            np.save(os.path.join(logs_save_path, 'all_across_train_scores.npy'), B_across)
+            np.save(os.path.join(logs_save_path, 'all_across_val_losses.npy'), C_across)
+            np.save(os.path.join(logs_save_path, 'all_across_val_scores.npy'), D_across)
+
+            # Track weights after each epoch
+            self.track_weights(model, epoch, 'across_hemi', logs_save_path)
+
+            epoch_end_time = time.time()
+            print('Across-hemi Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
+            print('')
+
+       
 
 
 
+    def track_weights(self, model, epoch, training_phase, logs_save_path):
+        """
+        Track weight evolution during training
+        
+        Args:
+            model: the RNN model
+            epoch: current epoch number
+            training_phase: 'within_hemi' or 'across_hemi'
+            logs_save_path: where to save the data
+        """
+        weight_data = {}
+        
+        # Extract weight matrices
+        for name, param in model.named_parameters():
+            # Only save weights, not biases, and strip prefix/suffix
+            if 'w_hh_linear' in name and name.endswith('.weight'):
+                # name might be 'rnn_cell.w_hh_linear_ll.weight'
+                key = name.split('.')[-2]  # gets 'w_hh_linear_ll'
+                weight_matrix = param.data.cpu().numpy()
+                weight_data[key] = weight_matrix
+        
+        # Save to file
+        save_path = os.path.join(logs_save_path, f'weights_epoch_{epoch}_{training_phase}.npz')
+        np.savez(save_path, **weight_data)
+        
+        print(f'Saved weights for epoch {epoch} ({training_phase})')
 
 
 
@@ -745,6 +833,131 @@ class DualALMRNNExp(object):
 
 
 
+
+    def plot_weights_changes(self, sub_sample=20):
+        """
+        Analyze and plot weight evolution over training epochs
+        chooses a random subset of weights and plots their changes over training epochs
+
+        sub_sample: number of weights selected randomly to plot
+        """
+
+        import matplotlib.pyplot as plt
+        
+        # Get all weight files
+        weight_files = [f for f in os.listdir(self.logs_save_path) if f.startswith('weights_epoch_')]
+        weight_files.sort()
+        
+        # Separate within-hemi and across-hemi files
+        within_hemi_files = [f for f in weight_files if 'within_hemi' in f]
+        across_hemi_files = [f for f in weight_files if 'across_hemi' in f]
+        
+        # Extract epochs
+        within_epochs = [int(f.split('_')[2]) for f in within_hemi_files]
+        across_epochs = [int(f.split('_')[2]) for f in across_hemi_files]
+        
+        # Initialize tracking arrays
+        weight_norms = {
+            'w_hh_linear_ll': {'within': [], 'across': []},
+            'w_hh_linear_rr': {'within': [], 'across': []},
+            'w_hh_linear_lr': {'within': [], 'across': []},
+            'w_hh_linear_rl': {'within': [], 'across': []}
+        }
+        # Randomly select sub_sample indices for sampling weights across all weights 
+        weight_indices = np.random.choice(self.configs['n_neurons']//2, sub_sample, replace=False)
+        # Load within-hemi weights
+        for epoch, filename in zip(within_epochs, within_hemi_files):
+            data = np.load(os.path.join(self.logs_save_path, filename))
+            for weight_name in weight_norms.keys():
+                if weight_name in data:
+                    weight_norms[weight_name]['within'].append(data[weight_name][weight_indices, weight_indices])
+        
+        # Load across-hemi weights
+        for epoch, filename in zip(across_epochs, across_hemi_files):
+            data = np.load(os.path.join(self.logs_save_path, filename))
+            for weight_name in weight_norms.keys():
+                if weight_name in data:
+                    weight_norms[weight_name]['across'].append(data[weight_name][weight_indices, weight_indices])
+        
+        # Create plots with two subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True, sharey=True)
+        fig.suptitle('Weight Evolution During Training', fontsize=16)
+        
+        # Prepare epoch arrays for plotting
+        all_epochs = []
+        
+        # Add within-hemi epochs
+        if within_epochs:
+            all_epochs.extend(within_epochs)
+        
+        # Add across-hemi epochs
+        if across_epochs:
+            across_epochs_adjusted = [e + len(within_epochs) for e in across_epochs]
+            all_epochs.extend(across_epochs_adjusted)
+        
+        # Add background colors for training phases
+        if all_epochs:
+            # Yellow background for within-hemi training
+            if within_epochs:
+                ax1.axvspan(-0.5, len(within_epochs)-0.5, alpha=0.3, color='yellow', label='Within-hemi training')
+                ax2.axvspan(-0.5, len(within_epochs)-0.5, alpha=0.3, color='yellow', label='Within-hemi training')
+            
+            # Grey background for across-hemi training
+            if across_epochs:
+                ax1.axvspan(len(within_epochs)-0.5, len(all_epochs)-0.5, alpha=0.3, color='grey', label='Across-hemi training')
+                ax2.axvspan(len(within_epochs)-0.5, len(all_epochs)-0.5, alpha=0.3, color='grey', label='Across-hemi training')
+        
+        # Plot within-hemisphere weights (top subplot) - individual lines
+        if all_epochs:
+            # Plot left-to-left weights
+            if weight_norms['w_hh_linear_ll']['within']:
+                ax1.plot(within_epochs, weight_norms['w_hh_linear_ll']['within'], 'g-', linewidth=2, label='Left-to-Left')
+            if weight_norms['w_hh_linear_ll']['across']:
+                ax1.plot(across_epochs_adjusted, weight_norms['w_hh_linear_ll']['across'], 'g-', linewidth=2)
+            
+            # Plot right-to-right weights
+            if weight_norms['w_hh_linear_rr']['within']:
+                ax1.plot(within_epochs, weight_norms['w_hh_linear_rr']['within'], 'g--', linewidth=2, label='Right-to-Right')
+            if weight_norms['w_hh_linear_rr']['across']:
+                ax1.plot(across_epochs_adjusted, weight_norms['w_hh_linear_rr']['across'], 'g--', linewidth=2)
+            
+            ax1.set_ylabel('Within-hemisphere weights')
+            ax1.set_title('Within-Hemisphere Weight Evolution')
+            # ax1.legend()
+            ax1.grid(True, alpha=0.3)
+        
+        # Plot inter-hemisphere weights (bottom subplot) - individual lines
+        if all_epochs:
+            # Plot left-to-right weights
+            if weight_norms['w_hh_linear_lr']['within']:
+                ax2.plot(within_epochs, weight_norms['w_hh_linear_lr']['within'], 'k-', linewidth=2, label='Left-to-Right')
+            if weight_norms['w_hh_linear_lr']['across']:
+                ax2.plot(across_epochs_adjusted, weight_norms['w_hh_linear_lr']['across'], 'k-', linewidth=2)
+            
+            # Plot right-to-left weights
+            if weight_norms['w_hh_linear_rl']['within']:
+                ax2.plot(within_epochs, weight_norms['w_hh_linear_rl']['within'], 'k--', linewidth=2, label='Right-to-Left')
+            if weight_norms['w_hh_linear_rl']['across']:
+                ax2.plot(across_epochs_adjusted, weight_norms['w_hh_linear_rl']['across'], 'k--', linewidth=2)
+            
+            ax2.set_xlabel('Training Epoch')
+            ax2.set_ylabel('Inter-hemisphere weights')
+            ax2.set_title('Inter-Hemisphere Weight Evolution')
+            # ax2.legend()
+            ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        fig_save_path = os.path.join(self.configs['plots_dir'], self.configs['model_type'], self.sub_path)
+        os.makedirs(fig_save_path, exist_ok=True)
+        
+        fig.savefig(os.path.join(fig_save_path, f'weight_evolution_across_hemi_n_epochs_{self.configs["across_hemi_n_epochs"]}_within_hemi_n_epochs_{self.configs["n_epochs"]}.png'), dpi=300, bbox_inches='tight')
+        fig.savefig(os.path.join(fig_save_path, f'weight_evolution_across_hemi_n_epochs_{self.configs["across_hemi_n_epochs"]}_within_hemi_n_epochs_{self.configs["n_epochs"]}.svg'), bbox_inches='tight')
+        
+        plt.close()
+        
+        print(f'Weight evolution analysis saved to {fig_save_path}')
 
 
     def plot_cd_traces(self):
@@ -1008,8 +1221,8 @@ class DualALMRNNExp(object):
             'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']))
         os.makedirs(fig_save_path, exist_ok=True)
 
-        fig.savefig(os.path.join(fig_save_path, 'plot_cd_traces_model_type_{}.png'.format(model_type)))        
-        fig.savefig(os.path.join(fig_save_path, 'plot_cd_traces_model_type_{}.svg'.format(model_type)))        
+        fig.savefig(os.path.join(fig_save_path, 'plot_cd_traces_model_type_{}_across_hemi_n_epochs_{}_within_hemi_n_epochs_{}.png'.format(model_type, self.configs['across_hemi_n_epochs'], self.configs['n_epochs'])))        
+        fig.savefig(os.path.join(fig_save_path, 'plot_cd_traces_model_type_{}_across_hemi_n_epochs_{}_within_hemi_n_epochs_{}.svg'.format(model_type, self.configs['across_hemi_n_epochs'], self.configs['n_epochs'])))        
 
 
         print('done!')

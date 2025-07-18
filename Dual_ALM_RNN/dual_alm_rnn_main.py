@@ -17,6 +17,8 @@ def parse_args():
 
     parser.add_argument('--plot_cd_traces', action='store_true', default=False)
 
+    parser.add_argument('--plot_weights_changes', action='store_true', default=False)
+
 
     return parser.parse_args()
 
@@ -40,6 +42,10 @@ def main():
     if args.plot_cd_traces:
         exp = DualALMRNNExp()
         exp.plot_cd_traces()
+
+    if args.plot_weights_changes:
+        exp = DualALMRNNExp()
+        exp.plot_weights_changes()
 
 
 

@@ -8,6 +8,7 @@ import os
 
 # 1) Load your model
 from dual_alm_rnn_models import *
+from dual_alm_rnn_exp import DualALMRNNExp
 
 # match these to your config
 model_kwargs = {
@@ -218,10 +219,15 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
     t_step = 25  # ms
     delay_begin = (delay_begin_t - trial_begin_t) // t_step
     
-    # --- CD computation using correct logic: difference between right-choice and left-choice trials within each hemisphere ---
-    # Get hidden states for left and right ALM
-    control_hs_left, control_labels, control_pred_labels = get_neurons_trace_for_cd(model, device, test_loader, hemi_type='left_ALM')
-    control_hs_right, _, _ = get_neurons_trace_for_cd(model, device, test_loader, hemi_type='right_ALM')
+    # Instantiate experiment object
+    exp = DualALMRNNExp()
+    model_type = configs["model_type"]
+
+    # Use exp.get_neurons_trace instead of get_neurons_trace_for_cd
+    control_hs_left, control_labels, control_pred_labels = exp.get_neurons_trace(
+        model, device, test_loader, model_type, hemi_type='left_ALM', return_pred_labels=True)
+    control_hs_right, _, _ = exp.get_neurons_trace(
+        model, device, test_loader, model_type, hemi_type='right_ALM', return_pred_labels=True)
 
     # Compute successful trials mask
     success_mask = (control_labels == control_pred_labels) & (control_pred_labels != -1)
@@ -229,7 +235,6 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
     left_trials = (control_labels == 0) & success_mask
 
     # Compute mean hidden states for right-choice and left-choice trials in each hemisphere
-    # Shape: (T, n_neurons//2)
     left_hemi_right_mean = control_hs_left[right_trials].mean(0)
     left_hemi_left_mean = control_hs_left[left_trials].mean(0)
     right_hemi_right_mean = control_hs_right[right_trials].mean(0)
@@ -247,23 +252,10 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
 
     cds = [cd_left, cd_right]
 
-    # --- CD decision boundaries for each hemisphere ---
-    # Use last time bin for decision boundary calculation
-    lick_left_h_left = control_hs_left[left_trials][:, -1]  # (n_trials, n_neurons//2)
-    lick_right_h_left = control_hs_left[right_trials][:, -1]  # (n_trials, n_neurons//2)
-    lick_left_h_right = control_hs_right[left_trials][:, -1]  # (n_trials, n_neurons//2)
-    lick_right_h_right = control_hs_right[right_trials][:, -1]  # (n_trials, n_neurons//2)
-
-    # Project onto CDs
-    lick_left_cd_proj_left = lick_left_h_left.dot(cd_left)
-    lick_right_cd_proj_left = lick_right_h_left.dot(cd_left)
-    lick_left_cd_proj_right = lick_left_h_right.dot(cd_right)
-    lick_right_cd_proj_right = lick_right_h_right.dot(cd_right)
-
-    # Compute decision boundaries
-    cd_db_left = (lick_left_cd_proj_left.mean()/lick_left_cd_proj_left.var(ddof=1) + lick_right_cd_proj_left.mean()/lick_right_cd_proj_left.var(ddof=1)) / (1/lick_left_cd_proj_left.var(ddof=1) + 1/lick_right_cd_proj_left.var(ddof=1))
-    cd_db_right = (lick_left_cd_proj_right.mean()/lick_left_cd_proj_right.var(ddof=1) + lick_right_cd_proj_right.mean()/lick_right_cd_proj_right.var(ddof=1)) / (1/lick_left_cd_proj_right.var(ddof=1) + 1/lick_right_cd_proj_right.var(ddof=1))
-    cd_dbs = [cd_db_left, cd_db_right]
+    # Use exp.get_cd_dbs to get decision boundaries
+    cd_dbs = exp.get_cd_dbs(cds, model, device, test_loader, model_type, recompute=True)
+    cd_db_left = cd_dbs[0]
+    cd_db_right = cd_dbs[1]
 
     # --- Now get CD projections for the specified perturbation condition ---
     model.uni_pert_trials_prob = 1.0 if use_perturbations else 0.0
@@ -316,8 +308,8 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
                 right_cd_projs = right_hemi_hs.dot(cds[1])  # (n_successful, delay_timesteps)
                 
                 # Center by decision boundaries
-                left_cd_projs = left_cd_projs - cd_dbs[0]
-                right_cd_projs = right_cd_projs - cd_dbs[1]
+                left_cd_projs = left_cd_projs - cd_db_left
+                right_cd_projs = right_cd_projs - cd_db_right
                 
                 # Flatten
                 left_cd_projs_flat = left_cd_projs.reshape(-1)
@@ -335,51 +327,6 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
         H_samples_righthemi = np.array([])
     
     return H_samples_lefthemi, H_samples_righthemi, cds, cd_dbs
-
-def get_neurons_trace_for_cd(model, device, loader, hemi_type='all'):
-    """Helper function to get hidden states for CD computation"""
-    total_hs = []
-    total_labels = []
-    total_pred_labels = []
-    
-    with torch.no_grad():
-        for batch_idx, data_batch in enumerate(loader):
-            inputs, labels = data_batch
-            inputs, labels = inputs.to(device), labels.to(device)
-            
-            # Forward pass
-            hs, zs = model(inputs)
-            
-            # Move to CPU and convert to numpy
-            hs_np = hs.detach().cpu().numpy()
-            labels_np = labels.detach().cpu().numpy()
-            
-            # Get predictions
-            preds_left_alm = (zs[:,-1,0] >= 0).long().detach().cpu().numpy()
-            preds_right_alm = (zs[:,-1,1] >= 0).long().detach().cpu().numpy()
-            
-            # Identify successful trials
-            agree_mask = (preds_left_alm == preds_right_alm)
-            pred_labels = np.zeros_like(preds_left_alm)
-            pred_labels[agree_mask] = preds_left_alm[agree_mask]
-            pred_labels[~agree_mask] = -1
-            
-            if hemi_type == 'left_ALM':
-                total_hs.append(hs_np[:, :, :model.n_neurons//2]) # Left ALM
-            elif hemi_type == 'right_ALM':
-                total_hs.append(hs_np[:, :, model.n_neurons//2:]) # Right ALM
-            else: # 'all'
-                total_hs.append(hs_np) # Full hidden state
-            
-            total_labels.append(labels_np)
-            total_pred_labels.append(pred_labels)
-    
-    # Concatenate all batches
-    total_hs = np.concatenate(total_hs, axis=0)
-    total_labels = np.concatenate(total_labels, axis=0)
-    total_pred_labels = np.concatenate(total_pred_labels, axis=0)
-    
-    return total_hs, total_labels, total_pred_labels
 
 # Generate CD projection sequences
 H_samples_lefthemi, H_samples_righthemi, cds, cd_dbs = generate_cd_state_sequence(model, use_perturbations=False)
