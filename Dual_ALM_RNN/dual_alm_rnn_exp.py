@@ -1242,7 +1242,7 @@ class DualALMRNNExp(object):
         os.makedirs(save_path, exist_ok=True)
 
         if not recompute and os.path.isfile(os.path.join(save_path, 'cds.npy')):
-            cds = np.load(os.path.join(save_path, 'cds.npy'))
+            cds = np.load(os.path.join(save_path, 'cds.npy'), allow_pickle=True)
             return cds 
 
         else:
@@ -1429,4 +1429,249 @@ class DualALMRNNExp(object):
 
 
 
+    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None):
+        """
+        Evaluate model accuracy under:
+        - Control (no perturbation)
+        - Left ALM photoinhibition
+        - Right ALM photoinhibition
+        - Bilateral photoinhibition
 
+        Args:
+            model: trained model
+            device: device to run on
+            loader: DataLoader over (xs, labels)
+            model_type: model type string
+            n_control: optional cap on number of control trials to subsample (for speed)
+            seed: optional RNG seed for reproducibility of any shuffling
+        
+        Returns:
+            dict with accuracy scores for each condition
+        """
+        if seed is not None:
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+
+        # Get CD and decision boundaries for evaluation
+        cds = self.get_cds(model, device, loader, model_type, recompute=False)
+        cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
+        
+        results = {}
+        
+        # 1. Control condition (no perturbation)
+        print("Evaluating control condition...")
+        model.uni_pert_trials_prob = 0
+        control_hs, control_labels, control_pred_labels = self.get_neurons_trace(
+            model, device, loader, model_type, hemi_type='all', return_pred_labels=True
+        )
+        
+        # Subsample if requested
+        if n_control is not None and len(control_labels) > n_control:
+            indices = np.random.choice(len(control_labels), n_control, replace=False)
+            control_hs = control_hs[indices]
+            control_labels = control_labels[indices]
+            control_pred_labels = control_pred_labels[indices]
+        
+        # Calculate accuracy using both readout and CD
+        control_readout_acc = np.mean(control_labels == control_pred_labels)
+        
+        # CD-based accuracy
+        control_cd_acc = self._calculate_cd_accuracy(control_hs, control_labels, cds, cd_dbs)
+        
+        results['control'] = {
+            'readout_accuracy': control_readout_acc,
+            'cd_accuracy': control_cd_acc,
+            'n_trials': len(control_labels)
+        }
+        
+        # 2. Left ALM photoinhibition
+        print("Evaluating left ALM photoinhibition...")
+        model.uni_pert_trials_prob = 1.0  # Apply perturbation to all trials
+        model.left_alm_pert_prob = 1.0    # All perturbations are left ALM
+        left_pert_hs, left_pert_labels, left_pert_pred_labels = self.get_neurons_trace(
+            model, device, loader, model_type, hemi_type='all', return_pred_labels=True
+        )
+        
+        left_pert_readout_acc = np.mean(left_pert_labels == left_pert_pred_labels)
+        left_pert_cd_acc = self._calculate_cd_accuracy(left_pert_hs, left_pert_labels, cds, cd_dbs)
+        
+        results['left_alm_pert'] = {
+            'readout_accuracy': left_pert_readout_acc,
+            'cd_accuracy': left_pert_cd_acc,
+            'n_trials': len(left_pert_labels)
+        }
+        
+        # 3. Right ALM photoinhibition
+        print("Evaluating right ALM photoinhibition...")
+        model.uni_pert_trials_prob = 1.0  # Apply perturbation to all trials
+        model.left_alm_pert_prob = 0.0    # All perturbations are right ALM
+        right_pert_hs, right_pert_labels, right_pert_pred_labels = self.get_neurons_trace(
+            model, device, loader, model_type, hemi_type='all', return_pred_labels=True
+        )
+        
+        right_pert_readout_acc = np.mean(right_pert_labels == right_pert_pred_labels)
+        right_pert_cd_acc = self._calculate_cd_accuracy(right_pert_hs, right_pert_labels, cds, cd_dbs)
+        
+        results['right_alm_pert'] = {
+            'readout_accuracy': right_pert_readout_acc,
+            'cd_accuracy': right_pert_cd_acc,
+            'n_trials': len(right_pert_labels)
+        }
+        
+        # 4. Bilateral photoinhibition (both left and right ALM)
+        print("Evaluating bilateral photoinhibition...")
+        bilateral_pert_hs, bilateral_pert_labels, bilateral_pert_pred_labels = self._apply_bilateral_perturbation(
+            model, device, loader, model_type
+        )
+        
+        bilateral_pert_readout_acc = np.mean(bilateral_pert_labels == bilateral_pert_pred_labels)
+        bilateral_pert_cd_acc = self._calculate_cd_accuracy(bilateral_pert_hs, bilateral_pert_labels, cds, cd_dbs)
+        
+        results['bilateral_pert'] = {
+            'readout_accuracy': bilateral_pert_readout_acc,
+            'cd_accuracy': bilateral_pert_cd_acc,
+            'n_trials': len(bilateral_pert_labels)
+        }
+        
+        # Reset model perturbation settings
+        model.uni_pert_trials_prob = 0
+        model.left_alm_pert_prob = 0.5
+        
+        # Print summary
+        print("\n" + "="*50)
+        print("PERTURBATION EVALUATION RESULTS")
+        print("="*50)
+        for condition, metrics in results.items():
+            print(f"{condition.replace('_', ' ').title()}:")
+            print(f"  Readout Accuracy: {metrics['readout_accuracy']:.3f}")
+            print(f"  CD Accuracy: {metrics['cd_accuracy']:.3f}")
+            print(f"  N Trials: {metrics['n_trials']}")
+            print()
+        
+        return results
+
+    def _calculate_cd_accuracy(self, hs, labels, cds, cd_dbs):
+        """
+        Calculate accuracy using CD projections and decision boundaries
+        
+        Args:
+            hs: hidden states (n_trials, T, n_neurons)
+            labels: true labels (n_trials,)
+            cds: choice directions for each hemisphere
+            cd_dbs: decision boundaries for each hemisphere
+        
+        Returns:
+            accuracy using CD-based classification
+        """
+        n_neurons = hs.shape[2]
+        n_trials = hs.shape[0]
+        
+        # Get final time point for classification
+        final_hs = hs[:, -1, :]  # (n_trials, n_neurons)
+        
+        # Calculate CD projections for each hemisphere
+        left_cd_proj = final_hs[:, :n_neurons//2].dot(cds[0][-1])  # (n_trials,)
+        right_cd_proj = final_hs[:, n_neurons//2:].dot(cds[1][-1])  # (n_trials,)
+        
+        # Make predictions using decision boundaries
+        left_preds = (left_cd_proj > cd_dbs[0]).astype(int)
+        right_preds = (right_cd_proj > cd_dbs[1]).astype(int)
+        
+        # Use agreement between hemispheres (if they disagree, mark as incorrect)
+        agree_mask = (left_preds == right_preds)
+        cd_preds = np.zeros_like(left_preds)
+        cd_preds[agree_mask] = left_preds[agree_mask]
+        cd_preds[~agree_mask] = -1  # Mark disagreement trials as incorrect
+        
+        # Calculate accuracy (excluding disagreement trials)
+        valid_mask = (cd_preds != -1)
+        if np.sum(valid_mask) == 0:
+            return 0.0
+        
+        cd_accuracy = np.mean(labels[valid_mask] == cd_preds[valid_mask])
+        return cd_accuracy
+
+    def _apply_bilateral_perturbation(self, model, device, loader, model_type):
+        """
+        Apply bilateral perturbation by manually setting both left and right perturbation masks
+        """
+        # Temporarily modify the model's perturbation settings
+        original_uni_pert_prob = model.uni_pert_trials_prob
+        original_left_alm_pert_prob = model.left_alm_pert_prob
+        
+        # Set up for bilateral perturbation
+        model.uni_pert_trials_prob = 1.0
+        model.left_alm_pert_prob = 0.5  # This will be overridden in the forward pass
+        
+        total_hs = []
+        total_labels = []
+        total_pred_labels = []
+        
+        model.eval()
+        
+        with torch.no_grad():
+            for batch_idx, data in enumerate(loader):
+                inputs, labels = data
+                inputs, labels = inputs.to(device), labels.to(device)
+                
+                # Manually apply bilateral perturbation
+                n_trials = inputs.size(0)
+                T = inputs.size(1)
+                h_pre = inputs.new_zeros(n_trials, model.n_neurons)
+                hs = []
+                
+                # Apply input processing (same as in model.forward)
+                xs_noise_left_alm = math.sqrt(2/model.a) * model.sigma_input_noise * torch.randn_like(inputs)
+                xs_noise_right_alm = math.sqrt(2/model.a) * model.sigma_input_noise * torch.randn_like(inputs)
+                
+                xs_left_alm_mask = (torch.rand(n_trials, 1, 1) >= model.xs_left_alm_drop_p).float().to(inputs.device)
+                xs_right_alm_mask = (torch.rand(n_trials, 1, 1) >= model.xs_right_alm_drop_p).float().to(inputs.device)
+                
+                xs_injected_left_alm = model.w_xh_linear_left_alm(inputs * xs_left_alm_mask * model.xs_left_alm_amp + xs_noise_left_alm)
+                xs_injected_right_alm = model.w_xh_linear_right_alm(inputs * xs_right_alm_mask * model.xs_right_alm_amp + xs_noise_right_alm)
+                xs_injected = torch.cat([xs_injected_left_alm, xs_injected_right_alm], 2)
+                
+                # Apply bilateral perturbation to all trials
+                for t in range(T):
+                    h = model.rnn_cell(xs_injected[:, t], h_pre)
+                    
+                    # Apply bilateral perturbation during delay period
+                    if t >= model.pert_begin and t <= model.pert_end:
+                        # Silence both left and right ALM neurons
+                        h[:, :model.n_neurons//2] = 0  # Left ALM
+                        h[:, model.n_neurons//2:] = 0  # Right ALM
+                    
+                    hs.append(h)
+                    h_pre = h
+                
+                hs = torch.stack(hs, 1)
+                
+                # Get readout predictions
+                zs_left_alm = model.readout_linear_left_alm(hs[..., :model.n_neurons//2])
+                zs_right_alm = model.readout_linear_right_alm(hs[..., model.n_neurons//2:])
+                zs = torch.cat([zs_left_alm, zs_right_alm], 2)
+                
+                # Calculate predictions
+                preds_left_alm = (zs[:, -1, 0] >= 0).long()
+                preds_right_alm = (zs[:, -1, 1] >= 0).long()
+                
+                # Agreement-based predictions
+                agree_mask = (preds_left_alm == preds_right_alm)
+                pred_labels = torch.zeros_like(preds_left_alm)
+                pred_labels[agree_mask] = preds_left_alm[agree_mask]
+                pred_labels[~agree_mask] = -1
+                
+                total_hs.append(hs.cpu().data.numpy())
+                total_labels.append(labels.cpu().data.numpy())
+                total_pred_labels.append(pred_labels.cpu().data.numpy())
+        
+        # Restore original perturbation settings
+        model.uni_pert_trials_prob = original_uni_pert_prob
+        model.left_alm_pert_prob = original_left_alm_pert_prob
+        
+        total_hs = np.concatenate(total_hs, 0)
+        total_labels = np.concatenate(total_labels, 0)
+        total_pred_labels = np.concatenate(total_pred_labels, 0)
+        
+        return total_hs, total_labels, total_pred_labels
+        
