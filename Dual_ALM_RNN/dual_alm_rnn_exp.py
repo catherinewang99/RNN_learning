@@ -1333,7 +1333,7 @@ class DualALMRNNExp(object):
             cd_dbs = np.zeros((n_loc_names,), dtype=object)
 
             for j in range(n_loc_names):
-                cur_cd = cds[j].T # (n_neurons//2)
+                cur_cd = cds[j].T # (n_neurons//2) inverted CW
 
                 if j == 0:
                     cur_lick_left_cd_proj = lick_left_h[:,:n_neurons//2].dot(cur_cd) # (n_trials of i)
