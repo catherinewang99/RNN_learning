@@ -68,14 +68,8 @@ def test_perturbation_evaluation():
         n_control=500,  # Limit control trials for speed
         seed=42  # For reproducibility
     )
-    
-    print("\nEvaluation complete!")
-    print("Results summary:")
-    for condition, metrics in results.items():
-        print(f"{condition}:")
-        print(f"  Readout Accuracy: {metrics['readout_accuracy']:.3f}")
-        print(f"  CD Accuracy: {metrics['cd_accuracy']:.3f}")
-        print(f"  N Trials: {metrics['n_trials']}")
+
+
 
 if __name__ == "__main__":
     test_perturbation_evaluation() 

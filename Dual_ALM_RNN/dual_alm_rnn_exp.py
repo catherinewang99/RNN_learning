@@ -515,7 +515,13 @@ class DualALMRNNExp(object):
 
         val_loader = data.DataLoader(val_set, **params)
 
-
+        # load test data for later
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy'))
+        
+        test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
+        test_loader = torch.utils.data.DataLoader(test_set, **params)
 
         '''
         Initialize the model.
@@ -568,6 +574,9 @@ class DualALMRNNExp(object):
         all_across_val_losses = []
         all_across_val_scores = []
 
+        # Separate lists for every epoch val results
+        all_val_results_dict = []
+
         best_val_score = float('-inf')
 
 
@@ -582,6 +591,16 @@ class DualALMRNNExp(object):
 
             train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
 
+              # After optimizer.step() and epoch ends
+            val_results = self.eval_with_perturbations(
+                model=model,
+                device=device,
+                loader=test_loader,  # or val_loader
+                model_type=model_type,
+                n_control=500,
+                seed=42
+            )
+            all_val_results_dict.append(val_results)
 
             val_loss, val_score = self.val_helper(model, device, val_loader, loss_fct) # On the entire val set.
 
@@ -622,6 +641,8 @@ class DualALMRNNExp(object):
 
             print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
+
+        np.save(os.path.join(logs_save_path, 'all_val_results_dict.npy'), all_val_results_dict)
 
         for epoch in range(self.configs['across_hemi_n_epochs']):
             epoch_begin_time = time.time()
@@ -1291,7 +1312,7 @@ class DualALMRNNExp(object):
         os.makedirs(save_path, exist_ok=True)
 
         if not recompute and os.path.isfile(os.path.join(save_path, 'cd_dbs.npy')):
-            cd_dbs = np.load(os.path.join(save_path, 'cd_dbs.npy'))
+            cd_dbs = np.load(os.path.join(save_path, 'cd_dbs.npy'), allow_pickle=True)
             return cd_dbs 
 
         else:
@@ -1312,7 +1333,7 @@ class DualALMRNNExp(object):
             cd_dbs = np.zeros((n_loc_names,), dtype=object)
 
             for j in range(n_loc_names):
-                cur_cd = cds[j] # (n_neurons//2)
+                cur_cd = cds[j].T # (n_neurons//2)
 
                 if j == 0:
                     cur_lick_left_cd_proj = lick_left_h[:,:n_neurons//2].dot(cur_cd) # (n_trials of i)
@@ -1455,99 +1476,87 @@ class DualALMRNNExp(object):
         # Get CD and decision boundaries for evaluation
         cds = self.get_cds(model, device, loader, model_type, recompute=False)
         cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
-        
         results = {}
-        
+
+        def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None):
+            # Get all-neuron labels for reference
+            _, all_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True)
+            if n_control is not None and len(all_labels) > n_control:
+                indices = np.random.choice(len(all_labels), n_control, replace=False)
+            else:
+                indices = np.arange(len(all_labels))
+
+            # Left ALM readout
+            left_hs, _, left_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True)
+            left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
+            # Right ALM readout
+            right_hs, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True)
+            right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
+            # Left ALM CD
+            left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs[indices], all_labels[indices], cds[0], cd_dbs[0])
+            # Right ALM CD
+            right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs[indices], all_labels[indices], cds[1], cd_dbs[1])
+            return {
+                'readout_accuracy_left': left_readout_acc,
+                'readout_accuracy_right': right_readout_acc,
+                'cd_accuracy_left': left_cd_acc,
+                'cd_accuracy_right': right_cd_acc,
+                'n_trials': len(indices)
+            }
+
         # 1. Control condition (no perturbation)
         print("Evaluating control condition...")
         model.uni_pert_trials_prob = 0
-        control_hs, control_labels, control_pred_labels = self.get_neurons_trace(
-            model, device, loader, model_type, hemi_type='all', return_pred_labels=True
-        )
-        
-        # Subsample if requested
-        if n_control is not None and len(control_labels) > n_control:
-            indices = np.random.choice(len(control_labels), n_control, replace=False)
-            control_hs = control_hs[indices]
-            control_labels = control_labels[indices]
-            control_pred_labels = control_pred_labels[indices]
-        
-        # Calculate accuracy using both readout and CD
-        control_readout_acc = np.mean(control_labels == control_pred_labels)
-        
-        # CD-based accuracy
-        control_cd_acc = self._calculate_cd_accuracy(control_hs, control_labels, cds, cd_dbs)
-        
-        results['control'] = {
-            'readout_accuracy': control_readout_acc,
-            'cd_accuracy': control_cd_acc,
-            'n_trials': len(control_labels)
-        }
-        
+        model.left_alm_pert_prob = 0.5
+        results['control'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=n_control)
+
         # 2. Left ALM photoinhibition
         print("Evaluating left ALM photoinhibition...")
-        model.uni_pert_trials_prob = 1.0  # Apply perturbation to all trials
-        model.left_alm_pert_prob = 1.0    # All perturbations are left ALM
-        left_pert_hs, left_pert_labels, left_pert_pred_labels = self.get_neurons_trace(
-            model, device, loader, model_type, hemi_type='all', return_pred_labels=True
-        )
-        
-        left_pert_readout_acc = np.mean(left_pert_labels == left_pert_pred_labels)
-        left_pert_cd_acc = self._calculate_cd_accuracy(left_pert_hs, left_pert_labels, cds, cd_dbs)
-        
-        results['left_alm_pert'] = {
-            'readout_accuracy': left_pert_readout_acc,
-            'cd_accuracy': left_pert_cd_acc,
-            'n_trials': len(left_pert_labels)
-        }
-        
+        model.uni_pert_trials_prob = 1.0
+        model.left_alm_pert_prob = 1.0
+        results['left_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
+
         # 3. Right ALM photoinhibition
         print("Evaluating right ALM photoinhibition...")
-        model.uni_pert_trials_prob = 1.0  # Apply perturbation to all trials
-        model.left_alm_pert_prob = 0.0    # All perturbations are right ALM
-        right_pert_hs, right_pert_labels, right_pert_pred_labels = self.get_neurons_trace(
-            model, device, loader, model_type, hemi_type='all', return_pred_labels=True
-        )
-        
-        right_pert_readout_acc = np.mean(right_pert_labels == right_pert_pred_labels)
-        right_pert_cd_acc = self._calculate_cd_accuracy(right_pert_hs, right_pert_labels, cds, cd_dbs)
-        
-        results['right_alm_pert'] = {
-            'readout_accuracy': right_pert_readout_acc,
-            'cd_accuracy': right_pert_cd_acc,
-            'n_trials': len(right_pert_labels)
-        }
-        
+        model.uni_pert_trials_prob = 1.0
+        model.left_alm_pert_prob = 0.0
+        results['right_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
+
         # 4. Bilateral photoinhibition (both left and right ALM)
         print("Evaluating bilateral photoinhibition...")
-        bilateral_pert_hs, bilateral_pert_labels, bilateral_pert_pred_labels = self._apply_bilateral_perturbation(
+        bilateral_pert_hs, bilateral_pert_labels, _ = self._apply_bilateral_perturbation(
             model, device, loader, model_type
         )
-        
-        bilateral_pert_readout_acc = np.mean(bilateral_pert_labels == bilateral_pert_pred_labels)
-        bilateral_pert_cd_acc = self._calculate_cd_accuracy(bilateral_pert_hs, bilateral_pert_labels, cds, cd_dbs)
-        
+        # For bilateral, use the same CD and DBs, and compute per-hemi CD accuracy
+        n_trials = len(bilateral_pert_labels)
+        left_hs = bilateral_pert_hs[:, :, :bilateral_pert_hs.shape[2]//2]
+        right_hs = bilateral_pert_hs[:, :, bilateral_pert_hs.shape[2]//2:]
+        left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs, bilateral_pert_labels, cds[0], cd_dbs[0])
+        right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs, bilateral_pert_labels, cds[1], cd_dbs[1])
         results['bilateral_pert'] = {
-            'readout_accuracy': bilateral_pert_readout_acc,
-            'cd_accuracy': bilateral_pert_cd_acc,
-            'n_trials': len(bilateral_pert_labels)
+            'readout_accuracy_left': np.nan,  # Not meaningful for bilateral, unless you want to add it
+            'readout_accuracy_right': np.nan,
+            'cd_accuracy_left': left_cd_acc,
+            'cd_accuracy_right': right_cd_acc,
+            'n_trials': n_trials
         }
-        
+
         # Reset model perturbation settings
         model.uni_pert_trials_prob = 0
         model.left_alm_pert_prob = 0.5
-        
+
         # Print summary
         print("\n" + "="*50)
-        print("PERTURBATION EVALUATION RESULTS")
+        print("PERTURBATION EVALUATION RESULTS (per hemisphere)")
         print("="*50)
         for condition, metrics in results.items():
             print(f"{condition.replace('_', ' ').title()}:")
-            print(f"  Readout Accuracy: {metrics['readout_accuracy']:.3f}")
-            print(f"  CD Accuracy: {metrics['cd_accuracy']:.3f}")
+            print(f"  Readout Accuracy Left: {metrics['readout_accuracy_left']:.3f}")
+            print(f"  Readout Accuracy Right: {metrics['readout_accuracy_right']:.3f}")
+            print(f"  CD Accuracy Left: {metrics['cd_accuracy_left']:.3f}")
+            print(f"  CD Accuracy Right: {metrics['cd_accuracy_right']:.3f}")
             print(f"  N Trials: {metrics['n_trials']}")
             print()
-        
         return results
 
     def _calculate_cd_accuracy(self, hs, labels, cds, cd_dbs):
@@ -1590,6 +1599,15 @@ class DualALMRNNExp(object):
         
         cd_accuracy = np.mean(labels[valid_mask] == cd_preds[valid_mask])
         return cd_accuracy
+
+    def _calculate_cd_accuracy_single_hemi(self, hs, labels, cd, cd_db):
+        # hs: (n_trials, T, n_neurons_in_hemi)
+        # cd: (T, n_neurons_in_hemi)
+        # cd_db: scalar
+        final_hs = hs[:, -1, :]  # (n_trials, n_neurons_in_hemi)
+        cd_proj = final_hs.dot(cd[-1])  # (n_trials,)
+        preds = (cd_proj > cd_db).astype(int)
+        return np.mean(labels == preds)
 
     def _apply_bilateral_perturbation(self, model, device, loader, model_type):
         """
