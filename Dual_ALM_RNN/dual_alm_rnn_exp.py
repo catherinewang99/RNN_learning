@@ -1475,6 +1475,16 @@ class DualALMRNNExp(object):
 
         # Get CD and decision boundaries for evaluation
         cds = self.get_cds(model, device, loader, model_type, recompute=False)
+
+        # Get cd by averaging over delay period:
+        old_cds = cds
+
+        # Average cd over the delay period.
+        cds = np.zeros((2,), dtype=object)
+        for j in range(self.n_loc_names):
+            cds[j] = old_cds[j][self.delay_begin:].mean(0)
+            cds[j] = cds[j]/np.linalg.norm(cds[j]) # (n_neurons in a given hemi)
+
         cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
         results = {}
 
@@ -1579,8 +1589,8 @@ class DualALMRNNExp(object):
         final_hs = hs[:, -1, :]  # (n_trials, n_neurons)
         
         # Calculate CD projections for each hemisphere
-        left_cd_proj = final_hs[:, :n_neurons//2].dot(cds[0][-1])  # (n_trials,)
-        right_cd_proj = final_hs[:, n_neurons//2:].dot(cds[1][-1])  # (n_trials,)
+        left_cd_proj = final_hs[:, :n_neurons//2].dot(cds[0])  # (n_trials,)
+        right_cd_proj = final_hs[:, n_neurons//2:].dot(cds[1])  # (n_trials,)
         
         # Make predictions using decision boundaries
         left_preds = (left_cd_proj > cd_dbs[0]).astype(int)
@@ -1602,10 +1612,10 @@ class DualALMRNNExp(object):
 
     def _calculate_cd_accuracy_single_hemi(self, hs, labels, cd, cd_db):
         # hs: (n_trials, T, n_neurons_in_hemi)
-        # cd: (T, n_neurons_in_hemi)
+        # cd: (n_neurons_in_hemi,)
         # cd_db: scalar
         final_hs = hs[:, -1, :]  # (n_trials, n_neurons_in_hemi)
-        cd_proj = final_hs.dot(cd[-1])  # (n_trials,)
+        cd_proj = final_hs.dot(cd)  # (n_trials, n_neurons_in_hemi) x (n_neurons_in_hemi,) = (n_trials,)
         preds = (cd_proj > cd_db).astype(int)
         return np.mean(labels == preds)
 

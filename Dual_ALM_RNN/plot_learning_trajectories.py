@@ -3,7 +3,13 @@ import matplotlib.pyplot as plt
 
 plt.rcParams['pdf.fonttype'] = '42' 
 
+# PLOT FOR ONE SEED
+results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_10/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['random_seed']), allow_pickle=True)
 
+
+
+
+#PLOT FOR ALL
 
 results_dict = np.load('all_val_results_dict.npy', allow_pickle=True)
 
@@ -13,6 +19,7 @@ f,ax=plt.subplots(1,2,figsize=(10,5), sharey='row')
 for i in range(len(results_dict)):
     ax[0].scatter(results_dict[i]['control']['cd_accuracy_left'], results_dict[i]['control']['readout_accuracy_left'], color='r', alpha=0.5)
     ax[1].scatter(results_dict[i]['control']['cd_accuracy_right'], results_dict[i]['control']['readout_accuracy_right'], color='b', alpha=0.5)
+
 ax[0].set_title('L hemi')
 ax[1].set_title('R hemi')
 ax[0].set_xlabel('CD Accuracy')
