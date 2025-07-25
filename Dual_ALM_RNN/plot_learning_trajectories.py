@@ -1,7 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt 
+from dual_alm_rnn_exp import DualALMRNNExp
+
 
 plt.rcParams['pdf.fonttype'] = '42' 
+exp = DualALMRNNExp()
 
 # PLOT FOR ONE SEED
 results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_10/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['random_seed']), allow_pickle=True)
@@ -45,6 +48,24 @@ plt.show()
 #PLOT FOR ALL
 
 results_dict = np.load('all_val_results_dict.npy', allow_pickle=True)
+
+# look at left/right readout accuracy over learning
+f=plt.figure()
+for i in range(len(results_dict)):
+    plt.scatter(results_dict[i]['control']['readout_accuracy_left'], results_dict[i]['control']['readout_accuracy_right'], color='black', alpha=0.5)
+
+# Compute min and max for the scatter plot axes
+all_left = [results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))]
+all_right = [results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))]
+min_val = min(np.min(all_left), np.min(all_right))
+max_val = max(np.max(all_left), np.max(all_right))
+plt.plot([min_val, max_val], [min_val, max_val], 'k:', lw=2)  # add dotted diagonal line
+plt.xlabel('Readout Accuracy Left')
+plt.ylabel('Readout Accuracy Right')
+plt.title('Control Accuracy')
+plt.savefig('figs/control_readout_accuracy_over_learning.pdf')
+plt.show()
+
 
 # Correlate cd accuracy with readout accuracy for each epoch within hemisphere for control condition (scatter plot)
 

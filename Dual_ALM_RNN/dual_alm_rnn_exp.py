@@ -642,13 +642,19 @@ class DualALMRNNExp(object):
             print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
 
-            # After each epoch
-            left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy().flatten()
-            right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy().flatten()
+        # After training
+        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy().flatten()
+        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy().flatten()
+        # For left ALM readout (maps left ALM hidden units to output)
+        left_readout_weights = model.readout_linear_left_alm.weight.data.cpu().numpy().flatten()  # shape: (n_left_neurons,)
+        # For right ALM readout (maps right ALM hidden units to output)
+        right_readout_weights = model.readout_linear_right_alm.weight.data.cpu().numpy().flatten()  # shape: (n_right_neurons,)
 
-            # Save to file, append to a list, or log as needed
-            np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_{epoch}.npy"), left_input_weights)
-            np.save(os.path.join(logs_save_path, f"input_weights_right_epoch_{epoch}.npy"), right_input_weights)
+        # Save to file, append to a list, or log as needed
+        np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_final.npy"), left_input_weights)
+        np.save(os.path.join(logs_save_path, f"input_weights_right_epoch_final.npy"), right_input_weights)
+        np.save(os.path.join(logs_save_path, f"readout_weights_left_epoch_final.npy"), left_readout_weights)
+        np.save(os.path.join(logs_save_path, f"readout_weights_right_epoch_final.npy"), right_readout_weights)
 
         np.save(os.path.join(logs_save_path, 'all_val_results_dict.npy'), all_val_results_dict)
 
