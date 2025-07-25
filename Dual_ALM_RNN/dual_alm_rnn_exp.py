@@ -642,6 +642,14 @@ class DualALMRNNExp(object):
             print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
 
+            # After each epoch
+            left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy().flatten()
+            right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy().flatten()
+
+            # Save to file, append to a list, or log as needed
+            np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_{epoch}.npy"), left_input_weights)
+            np.save(os.path.join(logs_save_path, f"input_weights_right_epoch_{epoch}.npy"), right_input_weights)
+
         np.save(os.path.join(logs_save_path, 'all_val_results_dict.npy'), all_val_results_dict)
 
         for epoch in range(self.configs['across_hemi_n_epochs']):
@@ -1364,7 +1372,9 @@ class DualALMRNNExp(object):
 
 
 
-    def get_neurons_trace(self, model, device, loader, model_type, hemi_type='left_ALM', recompute=False, return_pred_labels=False):
+    def get_neurons_trace(self, model, device, loader, model_type, 
+                        hemi_type='left_ALM', recompute=False, return_pred_labels=False,
+                        return_zs=False, hemi_agree=True):
         '''
         Return:
         numpy arrays
@@ -1386,6 +1396,8 @@ class DualALMRNNExp(object):
 
         if return_pred_labels:
             total_pred_labels = []
+            total_preds_left_alm = []
+            total_preds_right_alm = []
 
         begin_time = time.time()
         with torch.no_grad():
@@ -1418,26 +1430,33 @@ class DualALMRNNExp(object):
                 total_labels.append(labels.cpu().data.numpy())
 
                 if return_pred_labels:
+
                     preds_left_alm = (zs[:,-1,0] >= 0).long().cpu().data.numpy()
                     preds_right_alm = (zs[:,-1,1] >= 0).long().cpu().data.numpy()
 
                     # We take only trials for which both hemispheres agree in pred_labels. The other trials have value of -1.
-                    agree_mask = (preds_left_alm == preds_right_alm)
-                    pred_labels = np.zeros_like(preds_left_alm)
-                    pred_labels[agree_mask] = preds_left_alm[agree_mask]
-                    pred_labels[~agree_mask] = -1
+                    if hemi_agree and hemi_type == 'all':
+                        agree_mask = (preds_left_alm == preds_right_alm)
+                        pred_labels = np.zeros_like(preds_left_alm)
+                        pred_labels[agree_mask] = preds_left_alm[agree_mask]
+                        pred_labels[~agree_mask] = -1
 
-                    total_pred_labels.append(pred_labels)
-
+                        total_pred_labels.append(pred_labels)
+                    else:
+                        total_preds_left_alm.append(preds_left_alm)
+                        total_preds_right_alm.append(preds_right_alm)
 
         total_hs = cat(total_hs, 0)
         total_labels = cat(total_labels, 0)
 
-        if return_pred_labels:
+        if return_pred_labels and hemi_type == 'all':
             total_pred_labels = cat(total_pred_labels, 0)
 
         if return_pred_labels:
-            return total_hs, total_labels, total_pred_labels
+            if hemi_type == 'all':
+                return total_hs, total_labels, total_pred_labels
+            else:
+                return total_hs, total_labels, cat(total_preds_left_alm, 0), cat(total_preds_right_alm, 0) 
 
         else:
             return total_hs, total_labels
@@ -1486,21 +1505,22 @@ class DualALMRNNExp(object):
             cds[j] = cds[j]/np.linalg.norm(cds[j]) # (n_neurons in a given hemi)
 
         cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
+
         results = {}
 
         def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None):
             # Get all-neuron labels for reference
-            _, all_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True)
+            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False)
             if n_control is not None and len(all_labels) > n_control:
                 indices = np.random.choice(len(all_labels), n_control, replace=False)
             else:
                 indices = np.arange(len(all_labels))
 
             # Left ALM readout
-            left_hs, _, left_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True)
+            left_hs, _, left_pred_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True)
             left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
             # Right ALM readout
-            right_hs, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True)
+            right_hs, _, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True)
             right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
             # Left ALM CD
             left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs[indices], all_labels[indices], cds[0], cd_dbs[0])

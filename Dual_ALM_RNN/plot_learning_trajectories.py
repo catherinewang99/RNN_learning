@@ -5,10 +5,43 @@ plt.rcParams['pdf.fonttype'] = '42'
 
 # PLOT FOR ONE SEED
 results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_10/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['random_seed']), allow_pickle=True)
+# Cd readout accuracy when sides don't agree
+
+f,ax=plt.subplots(1,2,figsize=(10,5), sharey='row')
+for i in range(len(results_dict)):
+    ax[0].scatter(results_dict[i]['control']['cd_accuracy_left'], results_dict[i]['control']['readout_accuracy_left'], color='r', alpha=0.5)
+    ax[1].scatter(results_dict[i]['control']['cd_accuracy_right'], results_dict[i]['control']['readout_accuracy_right'], color='b', alpha=0.5)
+
+ax[0].set_title('L hemi')
+ax[1].set_title('R hemi')
+ax[0].set_xlabel('CD Accuracy')
+ax[0].set_ylabel('Readout Accuracy')
+plt.suptitle('Control Accuracy')
+plt.show()
+
+f=plt.figure()
+for i in range(len(results_dict)):
+    plt.scatter(results_dict[i]['control']['readout_accuracy_left'], results_dict[i]['control']['readout_accuracy_right'], color='black', alpha=0.5)
+
+# Compute min and max for the scatter plot axes
+all_left = [results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))]
+all_right = [results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))]
+min_val = min(np.min(all_left), np.min(all_right))
+max_val = max(np.max(all_left), np.max(all_right))
+plt.plot([min_val, max_val], [min_val, max_val], 'k:', lw=2)  # add dotted diagonal line
+plt.xlabel('Readout Accuracy Left')
+plt.ylabel('Readout Accuracy Right')
+plt.title('Control Accuracy')
+plt.show()
 
 
 
 
+
+
+
+
+#%%
 #PLOT FOR ALL
 
 results_dict = np.load('all_val_results_dict.npy', allow_pickle=True)

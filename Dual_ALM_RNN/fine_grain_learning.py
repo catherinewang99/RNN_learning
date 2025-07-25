@@ -37,8 +37,8 @@ def accumulate(accum, new_batch):
     return accum
 
 # Check if all_val_results_dict.npy file exists, if not run the loop
-if ~os.path.exists('all_val_results_dict.npy'):
-
+# if ~os.path.exists('all_val_results_dict.npy'):
+if True:
     for random_seed in range(50):  #generate 50 random seeds ie RNNs
 
         exp = DualALMRNNExp()
