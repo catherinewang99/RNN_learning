@@ -31,6 +31,10 @@
     "xs_right_alm_drop_p":0.0,
     "xs_left_alm_amp":1,
     "xs_right_alm_amp":0.2,
-    "across_hemi_n_epochs":10,
-    "init_cross_hemi_rel_factor":0.2
+    "across_hemi_n_epochs":0,
+    "init_cross_hemi_rel_factor":0.2,
+
+
+    "corruption_start_epoch":9,
+    "corruption_noise": 0.1
 }
