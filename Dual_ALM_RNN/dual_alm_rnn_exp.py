@@ -76,13 +76,21 @@ class DualALMRNNExp(object):
         self.logs_save_path = logs_save_path
 
     def init_sub_path(self, train_type):
-
-        self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
-            'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
-            'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
-            'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
-            'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
-            'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+        if train_type == 'train_type_modular_corruption':
+            self.sub_path = os.path.join(train_type, 'corr_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
+                'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+        else:
+            self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
 
 
 
@@ -699,7 +707,286 @@ class DualALMRNNExp(object):
             print('Across-hemi Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
 
+
+
        
+    def train_type_modular_corruption(self):
+
+
+        random_seed = self.configs['random_seed']
+
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+
+
+        model_type = self.configs['model_type']
+
+
+        self.init_sub_path('train_type_modular_corruption')
+
+
+        model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
+
+
+        logs_save_path = os.path.join(self.configs['logs_dir'], self.configs['model_type'], self.sub_path)
+        self.logs_save_path = logs_save_path
+
+        os.makedirs(model_save_path, exist_ok=True)
+        os.makedirs(logs_save_path, exist_ok=True)
+
+
+
+
+        # Detect devices
+        use_cuda = bool(self.configs['use_cuda'])
+        if use_cuda and not torch.cuda.is_available():
+            use_cuda = False
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
+
+        # device = torch.device("cuda:{}".format(self.configs['gpu_ids'][0]) if use_cuda else "cpu")
+
+        # Data loading parameters
+        if use_cuda:
+            params = {'batch_size': self.configs['bs'], 'shuffle': True, 'num_workers': self.configs['num_workers'], \
+            'pin_memory': bool(self.configs['pin_memory'])}
+        else:
+            params = {'batch_size': self.configs['bs'], 'shuffle': True}
+
+        '''
+        Load the dataset and wrap it with Pytorch Dataset.
+        '''
+
+        # train
+        train_save_path = os.path.join(self.configs['data_dir'], 'train')
+ 
+        train_sensory_inputs = np.load(os.path.join(train_save_path, 'sensory_inputs.npy'))
+        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy'))
+
+        train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
+
+        train_loader = data.DataLoader(train_set, **params, drop_last=True)
+
+        # val
+        val_save_path = os.path.join(self.configs['data_dir'], 'val')
+
+        val_sensory_inputs = np.load(os.path.join(val_save_path, 'sensory_inputs.npy'))
+        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels.npy'))
+
+        val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
+
+        val_loader = data.DataLoader(val_set, **params)
+
+        # load test data for later
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy'))
+        
+        test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
+        test_loader = torch.utils.data.DataLoader(test_set, **params)
+
+        '''
+        Initialize the model.
+        '''
+
+        import sys
+        model = getattr(sys.modules[__name__], model_type)(self.configs, \
+            self.a, self.pert_begin, self.pert_end).to(device)
+
+
+
+        '''
+        We only train the recurrent weights.
+        '''
+        params_within_hemi = []
+        params_cross_hemi = []
+        n_neurons = self.configs['n_neurons']
+
+
+        for name, param in model.named_parameters():
+            if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name):
+                params_within_hemi.append(param)
+            elif ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
+                params_cross_hemi.append(param)
+
+
+        optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+
+
+        loss_fct = nn.BCEWithLogitsLoss()
+
+
+
+
+        '''
+        Train the model.
+        '''
+
+
+
+        all_epoch_train_losses = []
+        all_epoch_train_scores = []
+        all_epoch_val_losses = []
+        all_epoch_val_scores = []
+
+        # Separate lists for across-hemi training
+        all_across_train_losses = []
+        all_across_train_scores = []
+        all_across_val_losses = []
+        all_across_val_scores = []
+
+        # Separate lists for every epoch val results
+        all_val_results_dict = []
+
+        best_val_score = float('-inf')
+
+
+        for epoch in range(self.configs['n_epochs']):
+
+            # Add corruption to the training data
+            if epoch >= self.configs['corruption_start_epoch']:
+                print('Adding corruption to the training data at epoch {}'.format(epoch))
+                # Add Gaussian noise (mean 0, std from configs['corruption_noise'])
+
+                model.corrupt = True
+                # Generate noise only for the sample period and early delay epoch, rest is zero
+                # noise = np.zeros(train_loader.dataset.tensors[0].shape, dtype=np.float32)
+                # # Get time indices for sample and early delay
+                # T = noise.shape[1]
+                # sample_begin = self.sample_begin
+                # delay_begin = self.delay_begin
+                # # Set noise for sample and early delay period (from sample_begin to delay_begin, inclusive)
+                # noise[:, sample_begin:delay_begin+1, :] = np.random.normal(
+                #     loc=0.0,
+                #     scale=self.configs['corruption_noise'],
+                #     size=(noise.shape[0], delay_begin - sample_begin + 1, noise.shape[2])
+                # )
+                # if isinstance(train_loader.dataset.tensors[0], torch.Tensor):
+                #     noise = torch.from_numpy(noise).type_as(train_loader.dataset.tensors[0])
+                # train_loader.dataset.tensors = (
+                #     train_loader.dataset.tensors[0] + noise,
+                #     train_loader.dataset.tensors[1]
+                # )
+
+
+            epoch_begin_time = time.time()
+
+
+            print('')
+            print('Within-hemi training')
+
+            model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+
+            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
+
+              # After optimizer.step() and epoch ends
+            val_results = self.eval_with_perturbations(
+                model=model,
+                device=device,
+                loader=test_loader,  # or val_loader
+                model_type=model_type,
+                n_control=500,
+                seed=42
+            )
+            all_val_results_dict.append(val_results)
+
+            val_loss, val_score = self.val_helper(model, device, val_loader, loss_fct) # On the entire val set.
+
+            if val_score > best_val_score:
+                best_val_score = val_score
+                model_save_name = 'best_model.pth'
+
+                torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))  # save model
+
+
+            all_epoch_train_losses.extend(train_losses)
+            all_epoch_train_scores.extend(train_scores)
+            all_epoch_val_losses.append(val_loss)
+            all_epoch_val_scores.append(val_score)
+
+            # A = np.array(all_epoch_train_losses)
+            # B = np.array(all_epoch_train_scores)
+            # C = np.array(all_epoch_val_losses)
+            # D = np.array(all_epoch_val_scores)
+
+            # after: pull everything back to CPU and to Python floats
+
+
+            A = np.array([to_float(t) for t in all_epoch_train_losses])
+            B = np.array([to_float(t) for t in all_epoch_train_scores])
+            C = np.array([to_float(t) for t in all_epoch_val_losses])
+            D = np.array([to_float(t) for t in all_epoch_val_scores])
+
+            np.save(os.path.join(logs_save_path, 'all_epoch_train_losses.npy'), A)
+            np.save(os.path.join(logs_save_path, 'all_epoch_train_scores.npy'), B)
+            np.save(os.path.join(logs_save_path, 'all_epoch_val_losses.npy'), C)
+            np.save(os.path.join(logs_save_path, 'all_epoch_val_scores.npy'), D)
+
+            # Track weights after each epoch
+            self.track_weights(model, epoch, 'within_hemi', logs_save_path)
+
+            epoch_end_time = time.time()
+
+            print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
+            print('')
+
+        # After training
+        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy().flatten()
+        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy().flatten()
+        # For left ALM readout (maps left ALM hidden units to output)
+        left_readout_weights = model.readout_linear_left_alm.weight.data.cpu().numpy().flatten()  # shape: (n_left_neurons,)
+        # For right ALM readout (maps right ALM hidden units to output)
+        right_readout_weights = model.readout_linear_right_alm.weight.data.cpu().numpy().flatten()  # shape: (n_right_neurons,)
+
+        # Save to file, append to a list, or log as needed
+        np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_final.npy"), left_input_weights)
+        np.save(os.path.join(logs_save_path, f"input_weights_right_epoch_final.npy"), right_input_weights)
+        np.save(os.path.join(logs_save_path, f"readout_weights_left_epoch_final.npy"), left_readout_weights)
+        np.save(os.path.join(logs_save_path, f"readout_weights_right_epoch_final.npy"), right_readout_weights)
+
+        np.save(os.path.join(logs_save_path, 'all_val_results_dict.npy'), all_val_results_dict)
+
+        for epoch in range(self.configs['across_hemi_n_epochs']):
+            epoch_begin_time = time.time()
+
+
+            print('')
+            print('Across-hemi training')
+
+            # Optionally, you can set a different uni_pert_trials_prob or other config here if needed
+            model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+
+            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_cross_hemi, epoch, loss_fct)
+            val_loss, val_score = self.val_helper(model, device, val_loader, loss_fct)
+
+            # Save best model if desired, or log as needed
+            if val_score > best_val_score:
+                best_val_score = val_score
+                model_save_name = 'best_model_across_hemi.pth'
+                torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))
+
+            all_across_train_losses.extend(train_losses)
+            all_across_train_scores.extend(train_scores)
+            all_across_val_losses.append(val_loss)
+            all_across_val_scores.append(val_score)
+
+            A_across = np.array([to_float(t) for t in all_across_train_losses])
+            B_across = np.array([to_float(t) for t in all_across_train_scores])
+            C_across = np.array([to_float(t) for t in all_across_val_losses])
+            D_across = np.array([to_float(t) for t in all_across_val_scores])
+
+            np.save(os.path.join(logs_save_path, 'all_across_train_losses.npy'), A_across)
+            np.save(os.path.join(logs_save_path, 'all_across_train_scores.npy'), B_across)
+            np.save(os.path.join(logs_save_path, 'all_across_val_losses.npy'), C_across)
+            np.save(os.path.join(logs_save_path, 'all_across_val_scores.npy'), D_across)
+
+            # Track weights after each epoch
+            self.track_weights(model, epoch, 'across_hemi', logs_save_path)
+
+            epoch_end_time = time.time()
+            print('Across-hemi Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
+            print('')
+
 
 
 

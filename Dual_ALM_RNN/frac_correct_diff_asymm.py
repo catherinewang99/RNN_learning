@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.5), (1,1), (0.5,1), (0.2,1), (0.1,1), (0,1)] # Sane as BK
 
+input_asym = [(0, 1)] # Sane as BK
 
 cd_acc_left, cd_acc_right = [], []
 cd_acc_rightpert_left, cd_acc_rightpert_right = [], []
@@ -20,7 +21,7 @@ control_acc_left, control_acc_right = [], []
 # Initialize the experiment
 exp = DualALMRNNExp()
 for input_asym in input_asym:
-    for seed in range(5):
+    for seed in range(5,10):
         exp.configs['xs_left_alm_amp'] = input_asym[0]
         exp.configs['xs_right_alm_amp'] = input_asym[1]
         exp.configs['random_seed'] = seed
@@ -36,23 +37,6 @@ for input_asym in input_asym:
             print(f"Training model ...")
             exp.train_type_modular()
 
-        # # Generate dataset if it doesn't exist
-        # if not os.path.exists(exp.configs['data_dir']):
-        #     print("Generating dataset...")
-        #     exp.generate_dataset()
-
-        # # Set up device
-        # use_cuda = bool(exp.configs['use_cuda'])
-        # if use_cuda and not torch.cuda.is_available():
-        #     use_cuda = False
-        # device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-
-        # # Data loading parameters
-        # if use_cuda:
-        #     params = {'batch_size': exp.configs['bs'], 'shuffle': False, 'num_workers': exp.configs['num_workers'], 
-        #     'pin_memory': bool(exp.configs['pin_memory'])}
-        # else:
-        #     params = {'batch_size': exp.configs['bs'], 'shuffle': False}
 
 
 #PLOT
@@ -72,19 +56,16 @@ for input_asym in input_asym:
     temp_control_acc = []
     temp_right_pert_acc = []
     temp_left_pert_acc = []
-    for seed in range(5):
+    for seed in range(10):
         path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(seed, input_asym[0], input_asym[1])
-
         results_dict = np.load(os.path.join(path, 'all_val_results_dict.npy'), allow_pickle=True)
-
-        temp_control_acc = np.mean([results_dict['control']['readout_accuracy_left'], results_dict['control']['readout_accuracy_right']])
-        temp_right_pert_acc = np.mean([results_dict['right_alm_pert']['readout_accuracy_left'], results_dict['right_alm_pert']['readout_accuracy_right']])
-        temp_left_pert_acc = np.mean([results_dict['left_alm_pert']['readout_accuracy_left'], results_dict['left_alm_pert']['readout_accuracy_right']])
+        temp_control_acc = np.mean([results_dict[-1]['control']['readout_accuracy_left'], results_dict[-1]['control']['readout_accuracy_right']])
+        temp_right_pert_acc = np.mean([results_dict[-1]['right_alm_pert']['readout_accuracy_left'], results_dict[-1]['right_alm_pert']['readout_accuracy_right']])
+        temp_left_pert_acc = np.mean([results_dict[-1]['left_alm_pert']['readout_accuracy_left'], results_dict[-1]['left_alm_pert']['readout_accuracy_right']])
     
     control_acc.append(np.mean(temp_control_acc))
     right_pert_acc.append(np.mean(temp_right_pert_acc))
     left_pert_acc.append(np.mean(temp_left_pert_acc))
-
     control_std.append(np.std(temp_control_acc))
     right_pert_std.append(np.std(temp_right_pert_acc))
     left_pert_std.append(np.std(temp_left_pert_acc))
@@ -93,7 +74,12 @@ xlabels=[-1, -0.8, -0.6, -0.2, 0, 0.2, 0.6, 0.8, 1]
 plt.errorbar(xlabels, control_acc, yerr=control_std, label='Control', color='black', ls='--')
 plt.errorbar(xlabels, right_pert_acc, yerr=right_pert_std, label='Right pert', color='darkgrey')
 plt.errorbar(xlabels, left_pert_acc, yerr=left_pert_std, label='Left pert', color='lightgrey')
+plt.ylabel('Readout accuracy')
+plt.xlabel('Input asymmetry')
+plt.ylim(0.5, 1)
+plt.xticks([-1,0,1],[-1,0,1])
 plt.legend()
+plt.savefig('figs/frac_correct_diff_asymm.pdf')
 plt.show()
 
 

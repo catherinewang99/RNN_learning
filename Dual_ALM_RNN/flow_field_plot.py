@@ -41,7 +41,8 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # C
 
 model = getattr(sys.modules[__name__], "TwoHemiRNNTanh")(configs, \
     a, pert_begin, pert_end).to(device)
-ckpt = torch.load("dual_alm_rnn_models/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_0/n_epochs_{}/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}.00_right_alm_amp_{}.00/init_cross_hemi_rel_factor_0.20/best_model.pth".format(configs['n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp']), map_location="cpu")
+path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_{}/n_epochs_40_n_epochs_across_hemi_10/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(0, 1.0, 0.2)
+ckpt = torch.load(path + '/best_model.pth'.format(configs['n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp']), map_location="cpu")
 model.load_state_dict(ckpt)
 model.eval()
 
@@ -224,9 +225,11 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
     model_type = configs["model_type"]
 
     # Use exp.get_neurons_trace instead of get_neurons_trace_for_cd
-    control_hs_left, control_labels, control_pred_labels = exp.get_neurons_trace(
+    _, control_labels, control_pred_labels,_ = exp.get_neurons_trace(
+        model, device, test_loader, model_type, return_pred_labels=True)
+    control_hs_left, _, _,_ = exp.get_neurons_trace(
         model, device, test_loader, model_type, hemi_type='left_ALM', return_pred_labels=True)
-    control_hs_right, _, _ = exp.get_neurons_trace(
+    control_hs_right, _, _, _ = exp.get_neurons_trace(
         model, device, test_loader, model_type, hemi_type='right_ALM', return_pred_labels=True)
 
     # Compute successful trials mask

@@ -332,6 +332,11 @@ class TwoHemiRNNTanh(nn.Module):
         self.xs_left_alm_amp = configs['xs_left_alm_amp']
         self.xs_right_alm_amp = configs['xs_right_alm_amp']
 
+        self.corrupt=False
+        if configs['train_type'] == 'train_type_modular_corruption':
+            self.corruption_start_epoch = configs['corruption_start_epoch']
+            self.corruption_noise = configs['corruption_noise']
+
 
     def get_w_hh(self):
         w_hh = torch.zeros((self.n_neurons, self.n_neurons))
@@ -426,9 +431,18 @@ class TwoHemiRNNTanh(nn.Module):
         xs_left_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_left_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
         xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
 
+        if self.corrupt:
+            corr_level = self.corruption_noise
+            xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
 
-        xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
-        xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
+            # Keep right side unchanged
+            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+        else:
+            # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
+            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
 
         xs_injected = torch.cat([xs_injected_left_alm, xs_injected_right_alm], 2)
 
