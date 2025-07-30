@@ -77,7 +77,7 @@ class DualALMRNNExp(object):
 
     def init_sub_path(self, train_type):
         if train_type == 'train_type_modular_corruption':
-            self.sub_path = os.path.join(train_type, 'corr_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
+            self.sub_path = os.path.join(train_type, 'cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
                 'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
@@ -1683,6 +1683,8 @@ class DualALMRNNExp(object):
         total_hs = []
         total_labels = []
 
+        model.corrupt=False
+
         model.eval()
 
         trial_count = 0
@@ -1824,6 +1826,7 @@ class DualALMRNNExp(object):
                 'readout_accuracy_right': right_readout_acc,
                 'cd_accuracy_left': left_cd_acc,
                 'cd_accuracy_right': right_cd_acc,
+                'n_trials_agreed': np.sum(left_pred_labels[indices] == right_pred_labels[indices]),
                 'n_trials': len(indices)
             }
 

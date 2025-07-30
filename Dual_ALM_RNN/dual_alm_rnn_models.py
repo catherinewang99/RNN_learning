@@ -336,6 +336,7 @@ class TwoHemiRNNTanh(nn.Module):
         if configs['train_type'] == 'train_type_modular_corruption':
             self.corruption_start_epoch = configs['corruption_start_epoch']
             self.corruption_noise = configs['corruption_noise']
+            self.corruption_type = configs['corruption_type']
 
 
     def get_w_hh(self):
@@ -433,11 +434,18 @@ class TwoHemiRNNTanh(nn.Module):
 
         if self.corrupt:
             corr_level = self.corruption_noise
-            xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
+            if self.corruption_type == "poisson":
+                # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
+                xs_noise_left_alm_corr = math.sqrt(2/self.a)*torch.poisson(torch.ones_like(xs.cpu()) * corr_level).to(xs.device)
+
+            else:
+                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
 
             xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
             # Keep right side unchanged
             xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+
 
         else:
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
