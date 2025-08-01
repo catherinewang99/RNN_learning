@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt 
 from dual_alm_rnn_exp import DualALMRNNExp
+import seaborn as sns
+import glob
+import os
 
 
 plt.rcParams['pdf.fonttype'] = '42' 
@@ -83,6 +86,100 @@ ax2.legend()
 
 plt.tight_layout()
 plt.savefig('figs/LR_readoutacc_and_agreement_corrupted_learning_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['corruption_type']))
+plt.show()
+
+
+
+
+## Look at perturbation conditions
+
+
+# Plot the performance at the end of training (last epoch) for all models where corruption started at epoch 7
+
+
+# Preallocate arrays for each condition (one value per model/seed)
+control_left = []
+leftpert_left = []
+rightpert_left = []
+
+control_right = []
+leftpert_right = []
+rightpert_right = []
+
+
+# Get the last epoch (post-training) for each condition
+control_left.append(results_dict[-1]['control']['readout_accuracy_left'])
+leftpert_left.append(results_dict[-1]['left_alm_pert']['readout_accuracy_left'])
+rightpert_left.append(results_dict[-1]['right_alm_pert']['readout_accuracy_left'])
+control_right.append(results_dict[-1]['control']['readout_accuracy_right'])
+leftpert_right.append(results_dict[-1]['left_alm_pert']['readout_accuracy_right'])
+rightpert_right.append(results_dict[-1]['right_alm_pert']['readout_accuracy_right'])
+
+# Convert to numpy arrays
+control_left = np.array(control_left)
+leftpert_left = np.array(leftpert_left)
+rightpert_left = np.array(rightpert_left)
+
+control_right = np.array(control_right)
+leftpert_right = np.array(leftpert_right)
+rightpert_right = np.array(rightpert_right)
+
+n_models = len(control_left)
+
+# Prepare data for plotting
+bar_means_left = [np.mean(control_left), np.mean(leftpert_left), np.mean(rightpert_left)]
+bar_sems_left = [np.std(control_left, ddof=1)/np.sqrt(n_models),
+                np.std(leftpert_left, ddof=1)/np.sqrt(n_models),
+                np.std(rightpert_left, ddof=1)/np.sqrt(n_models)]
+
+bar_means_right = [np.mean(control_right), np.mean(leftpert_right), np.mean(rightpert_right)]
+bar_sems_right = [np.std(control_right, ddof=1)/np.sqrt(n_models),
+                np.std(leftpert_right, ddof=1)/np.sqrt(n_models),
+                np.std(rightpert_right, ddof=1)/np.sqrt(n_models)]
+
+labels = ['Control', 'Left Perturb', 'Right Perturb']
+bar_colors = ['#888888', '#e41a1c', '#377eb8']  # grey, red, blue
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+
+# --- Left Hemi subplot ---
+ax = axes[0]
+bars = ax.bar(range(3), bar_means_left, yerr=bar_sems_left, capsize=6, color=bar_colors, alpha=0.7)
+
+# Scatter the individual model points and connect them
+for i, (c, l, r) in enumerate(zip(control_left, leftpert_left, rightpert_left)):
+    ax.plot([0, 1, 2], [c, l, r], color='gray', alpha=0.5, marker='o', markersize=7, linewidth=1.5, zorder=10)
+
+# Overlay the individual points for each bar
+ax.scatter(np.full(n_models, 0), control_left, color='k', s=40, zorder=20, label='Models')
+ax.scatter(np.full(n_models, 1), leftpert_left, color='k', s=40, zorder=20)
+ax.scatter(np.full(n_models, 2), rightpert_left, color='k', s=40, zorder=20)
+
+ax.set_xticks([0, 1, 2])
+ax.set_xticklabels(labels)
+ax.set_ylabel('Readout Accuracy')
+ax.set_title('Left Hemi Readout Accuracy\n(Corruption@Epoch {})'.format(corruption_start_epoch))
+ax.set_ylim(0.0, 1.05)
+ax.grid(axis='y', linestyle=':', alpha=0.5)
+
+# --- Right Hemi subplot ---
+ax = axes[1]
+bars = ax.bar(range(3), bar_means_right, yerr=bar_sems_right, capsize=6, color=bar_colors, alpha=0.7)
+
+for i, (c, l, r) in enumerate(zip(control_right, leftpert_right, rightpert_right)):
+    ax.plot([0, 1, 2], [c, l, r], color='gray', alpha=0.5, marker='o', markersize=7, linewidth=1.5, zorder=10)
+
+ax.scatter(np.full(len(control_right), 0), control_right, color='k', s=40, zorder=20, label='Models')
+ax.scatter(np.full(len(leftpert_right), 1), leftpert_right, color='k', s=40, zorder=20)
+ax.scatter(np.full(len(rightpert_right), 2), rightpert_right, color='k', s=40, zorder=20)
+
+ax.set_xticks([0, 1, 2])
+ax.set_xticklabels(labels)
+ax.set_title('Right Hemi Readout Accuracy\n(Corruption@Epoch {})'.format(corruption_start_epoch))
+ax.set_ylim(0.0, 1.05)
+ax.grid(axis='y', linestyle=':', alpha=0.5)
+
+plt.tight_layout()
 plt.show()
 
 
