@@ -297,6 +297,7 @@ class DualALMRNNExp(object):
 
 
     def generate_dataset_onehot(self):
+
         random_seed = self.configs['dataset_random_seed']
 
         np.random.seed(random_seed)
@@ -333,25 +334,44 @@ class DualALMRNNExp(object):
         Generate the train, val and test set.
         '''
 
-        train_sensory_inputs = np.zeros((n_train_trials, T, 1), dtype=np.float32)
-        train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
-
-        shuffled_inds = np.random.permutation(n_train_trials)
-        train_trial_type_labels[shuffled_inds[:n_train_trials//2]] = 1
-
         # Change input dimension from 1 to 2 (one-hot encoding)
         train_sensory_inputs = np.zeros((n_train_trials, T, 2), dtype=np.float32)
         val_sensory_inputs = np.zeros((n_val_trials, T, 2), dtype=np.float32) 
         test_sensory_inputs = np.zeros((n_test_trials, T, 2), dtype=np.float32)
 
+        train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
+        val_trial_type_labels = np.zeros((n_val_trials,), dtype=int)
+        test_trial_type_labels = np.zeros((n_test_trials,), dtype=int)
+
+        # Labels of trial type (random)
+        shuffled_inds = np.random.permutation(n_train_trials)
+        train_trial_type_labels[shuffled_inds[:n_train_trials//2]] = 1
+        shuffled_inds = np.random.permutation(n_val_trials)
+        val_trial_type_labels[shuffled_inds[:n_val_trials//2]] = 1
+        shuffled_inds = np.random.permutation(n_test_trials)
+        test_trial_type_labels[shuffled_inds[:n_test_trials//2]] = 1
+        
         # For each trial type, set the appropriate one-hot channel
         for i in range(self.n_trial_types):
+
+            # Train labels first
             cur_trial_type_inds = np.nonzero(train_trial_type_labels==i)[0]
-            
+            gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
             # Left trials (i=0): [1, 0], Right trials (i=1): [0, 1]
-            train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = 1.0
-            val_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = 1.0
-            test_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = 1.0
+            train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means[1] + sensory_input_stds[1]*gaussian_samples # Only use the positive values
+
+            # Val labels
+            cur_trial_type_inds = np.nonzero(val_trial_type_labels==i)[0]
+            gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            val_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means[1] + sensory_input_stds[1]*gaussian_samples # Only use the positive values
+
+            # Test labels
+            cur_trial_type_inds = np.nonzero(test_trial_type_labels==i)[0]
+            gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            test_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means[1] + sensory_input_stds[1]*gaussian_samples # Only use the positive values
 
 
         '''
@@ -376,7 +396,6 @@ class DualALMRNNExp(object):
         sample_inds = np.random.permutation(n_train_trials)[:10]
         sample_train_inputs = train_sensory_inputs[sample_inds]
         sample_train_labels = train_trial_type_labels[sample_inds]
-
 
 
 
