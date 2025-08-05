@@ -61,6 +61,7 @@ class DualALMRNNExp(object):
         self.n_loc_names_list = ['left_ALM', 'right_ALM']
         self.loc_name_list = self.n_loc_names_list
         self.n_trial_types_list = range(self.n_trial_types)
+        self.one_hot = self.configs['one_hot']
 
         self.n_neurons = self.configs['n_neurons']
         self.neural_unit_location = np.zeros((self.n_neurons,), dtype=object)
@@ -78,6 +79,14 @@ class DualALMRNNExp(object):
     def init_sub_path(self, train_type):
         if train_type == 'train_type_modular_corruption':
             self.sub_path = os.path.join(train_type, 'cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
+                'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+        elif self.one_hot:
+            self.sub_path = os.path.join(train_type, 'onehot_cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
                 'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
@@ -1959,18 +1968,18 @@ class DualALMRNNExp(object):
             model, device, loader, model_type
         )
         # For bilateral, use the same CD and DBs, and compute per-hemi CD accuracy
-        n_trials = len(bilateral_pert_labels)
-        left_hs = bilateral_pert_hs[:, :, :bilateral_pert_hs.shape[2]//2]
-        right_hs = bilateral_pert_hs[:, :, bilateral_pert_hs.shape[2]//2:]
-        left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs, bilateral_pert_labels, cds[0], cd_dbs[0])
-        right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs, bilateral_pert_labels, cds[1], cd_dbs[1])
-        results['bilateral_pert'] = {
-            'readout_accuracy_left': np.nan,  # Not meaningful for bilateral, unless you want to add it
-            'readout_accuracy_right': np.nan,
-            'cd_accuracy_left': left_cd_acc,
-            'cd_accuracy_right': right_cd_acc,
-            'n_trials': n_trials
-        }
+        # n_trials = len(bilateral_pert_labels)
+        # left_hs = bilateral_pert_hs[:, :, :bilateral_pert_hs.shape[2]//2]
+        # right_hs = bilateral_pert_hs[:, :, bilateral_pert_hs.shape[2]//2:]
+        # left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs, bilateral_pert_labels, cds[0], cd_dbs[0])
+        # right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs, bilateral_pert_labels, cds[1], cd_dbs[1])
+        # results['bilateral_pert'] = {
+        #     'readout_accuracy_left': np.nan,  # Not meaningful for bilateral, unless you want to add it
+        #     'readout_accuracy_right': np.nan,
+        #     'cd_accuracy_left': left_cd_acc,
+        #     'cd_accuracy_right': right_cd_acc,
+        #     'n_trials': n_trials
+        # }
 
         # Reset model perturbation settings
         model.uni_pert_trials_prob = 0

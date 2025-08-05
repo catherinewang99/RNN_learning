@@ -283,6 +283,8 @@ class TwoHemiRNNTanh(nn.Module):
     def __init__(self, configs, a, pert_begin, pert_end, zero_init_cross_hemi=False, return_input=False):
         super().__init__()
 
+        self.one_hot = configs['one_hot']
+
         self.return_input = return_input
 
         self.configs = configs
@@ -316,6 +318,9 @@ class TwoHemiRNNTanh(nn.Module):
         
         self.w_xh_linear_left_alm = nn.Linear(1, self.n_neurons//2, bias=False)
         self.w_xh_linear_right_alm = nn.Linear(1, self.n_neurons-self.n_neurons//2, bias=False)
+        if self.one_hot:
+            self.w_xh_linear_left_alm = nn.Linear(2, self.n_neurons//2, bias=False)  # 2 input channels
+            self.w_xh_linear_right_alm = nn.Linear(2, self.n_neurons-self.n_neurons//2, bias=False)
 
         self.readout_linear_left_alm = nn.Linear(self.n_neurons//2, 1)
         self.readout_linear_right_alm = nn.Linear(self.n_neurons-self.n_neurons//2, 1)
@@ -331,6 +336,8 @@ class TwoHemiRNNTanh(nn.Module):
 
         self.xs_left_alm_amp = configs['xs_left_alm_amp']
         self.xs_right_alm_amp = configs['xs_right_alm_amp']
+
+
 
         self.corrupt=False
         if configs['train_type'] == 'train_type_modular_corruption':
@@ -412,7 +419,7 @@ class TwoHemiRNNTanh(nn.Module):
     def forward(self, xs):
         '''
         Input:
-        xs: (n_trials, T, 1)
+        xs: (n_trials, T, 1) or (n_trials, T, 2)
 
         Output:
         hs: (n_trials, T, n_neurons)
@@ -422,19 +429,26 @@ class TwoHemiRNNTanh(nn.Module):
         T = xs.size(1)
         h_pre = xs.new_zeros(n_trials, self.n_neurons)
         hs = []
-
         # input noise
         xs_noise_left_alm = math.sqrt(2/self.a)*self.sigma_input_noise*torch.randn_like(xs)
         xs_noise_right_alm = math.sqrt(2/self.a)*self.sigma_input_noise*torch.randn_like(xs)
-
-        # input trial mask
-        n_trials = xs.size(0)
-        xs_left_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_left_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
-        xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
+        
+        if self.one_hot:
+            # Input masks - now need to match 2D input
+            xs_left_alm_mask = (torch.rand(n_trials,1,2) >= self.xs_left_alm_drop_p).float().to(xs.device)
+            xs_right_alm_mask = (torch.rand(n_trials,1,2) >= self.xs_right_alm_drop_p).float().to(xs.device)
+        else:
+            # input trial mask
+            n_trials = xs.size(0)
+            xs_left_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_left_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
+            xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
 
         if self.corrupt:
             corr_level = self.corruption_noise
-            if self.corruption_type == "poisson":
+            if self.one_hot:
+                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian
+
+            elif self.corruption_type == "poisson":
                 # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
                 xs_noise_left_alm_corr = math.sqrt(2/self.a)*torch.poisson(torch.ones_like(xs.cpu()) * corr_level).to(xs.device)
 

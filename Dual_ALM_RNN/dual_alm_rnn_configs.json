@@ -37,5 +37,7 @@
 
     "corruption_start_epoch":2,
     "corruption_noise": 1.4,
-    "corruption_type":"guassian"
+    "corruption_type":"gaussian",
+
+    "one_hot":1
 }
