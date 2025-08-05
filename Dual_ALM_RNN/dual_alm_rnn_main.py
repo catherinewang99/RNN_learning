@@ -11,6 +11,8 @@ def parse_args():
 
     parser.add_argument('--generate_dataset', action='store_true', default=False)
 
+    parser.add_argument('--generate_dataset_onehot', action='store_true', default=False)
+
     parser.add_argument('--train_type_uniform', action='store_true', default=False)
 
     parser.add_argument('--train_type_modular', action='store_true', default=False)
@@ -32,6 +34,10 @@ def main():
     if args.generate_dataset:
         exp = DualALMRNNExp()
         exp.generate_dataset()
+
+    if args.generate_dataset_onehot:
+        exp = DualALMRNNExp()
+        exp.generate_dataset_onehot()
 
     if args.train_type_uniform:
         exp = DualALMRNNExp()

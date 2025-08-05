@@ -296,6 +296,92 @@ class DualALMRNNExp(object):
 
 
 
+    def generate_dataset_onehot(self):
+        random_seed = self.configs['dataset_random_seed']
+
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+
+
+
+        T = self.T
+        sample_begin = self.sample_begin
+        delay_begin = self.delay_begin
+
+        presample_mask = np.zeros((T,), dtype=bool)
+        presample_mask[:sample_begin] = True
+        presample_inds = np.arange(0,sample_begin)
+
+        sample_mask = np.zeros((T,), dtype=bool)
+        sample_mask[sample_begin:delay_begin] = True
+        sample_inds = np.arange(sample_begin,delay_begin)
+
+ 
+        delay_mask = np.zeros((T,), dtype=bool)
+        delay_mask[delay_begin:] = True
+        delay_inds = np.arange(delay_begin,T)
+
+
+        n_train_trials = 5000
+        n_val_trials = 1000
+        n_test_trials = 1000
+
+        sensory_input_means = self.sensory_input_means
+        sensory_input_stds = self.sensory_input_stds
+
+        '''
+        Generate the train, val and test set.
+        '''
+
+        train_sensory_inputs = np.zeros((n_train_trials, T, 1), dtype=np.float32)
+        train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
+
+        shuffled_inds = np.random.permutation(n_train_trials)
+        train_trial_type_labels[shuffled_inds[:n_train_trials//2]] = 1
+
+        # Change input dimension from 1 to 2 (one-hot encoding)
+        train_sensory_inputs = np.zeros((n_train_trials, T, 2), dtype=np.float32)
+        val_sensory_inputs = np.zeros((n_val_trials, T, 2), dtype=np.float32) 
+        test_sensory_inputs = np.zeros((n_test_trials, T, 2), dtype=np.float32)
+
+        # For each trial type, set the appropriate one-hot channel
+        for i in range(self.n_trial_types):
+            cur_trial_type_inds = np.nonzero(train_trial_type_labels==i)[0]
+            
+            # Left trials (i=0): [1, 0], Right trials (i=1): [0, 1]
+            train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = 1.0
+            val_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = 1.0
+            test_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = 1.0
+
+
+        '''
+        Save.
+        '''
+        train_save_path = os.path.join(self.configs['data_dir'], 'train')
+        os.makedirs(train_save_path, exist_ok=True)
+        np.save(os.path.join(train_save_path, 'onehot_sensory_inputs.npy'), train_sensory_inputs)
+        np.save(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'), train_trial_type_labels)
+
+        val_save_path = os.path.join(self.configs['data_dir'], 'val')
+        os.makedirs(val_save_path, exist_ok=True)
+        np.save(os.path.join(val_save_path, 'onehot_sensory_inputs.npy'), val_sensory_inputs)
+        np.save(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'), val_trial_type_labels)
+
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+        os.makedirs(test_save_path, exist_ok=True)
+        np.save(os.path.join(test_save_path, 'onehot_sensory_inputs.npy'), test_sensory_inputs)
+        np.save(os.path.join(test_save_path, 'onehot_trial_type_labels.npy'), test_trial_type_labels)
+
+
+        sample_inds = np.random.permutation(n_train_trials)[:10]
+        sample_train_inputs = train_sensory_inputs[sample_inds]
+        sample_train_labels = train_trial_type_labels[sample_inds]
+
+
+
+
+
+
 
     def train_type_uniform(self):
 

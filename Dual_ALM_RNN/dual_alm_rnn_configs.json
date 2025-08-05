@@ -18,7 +18,7 @@
     "sigma_input_noise":0.1,
     "sigma_rec_noise":0.1,
     "test_sigma_input_noise":0.1,
-    "test_sigma_rec_noise":0.1,
+    "test_sigma_rec_noise":0.1, 
     "random_seed":0,
     "dataset_random_seed":111,
     "test_random_seed":777,
