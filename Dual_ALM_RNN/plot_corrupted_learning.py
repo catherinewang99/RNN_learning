@@ -9,8 +9,10 @@ import os
 plt.rcParams['pdf.fonttype'] = '42' 
 
 exp = DualALMRNNExp()
-
-results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular_corruption/cor_type_{}_epoch_{}_noise_{}0/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['random_seed']), allow_pickle=True)
+if exp.configs['one_hot']:
+    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['random_seed']), allow_pickle=True)
+else:
+    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular_corruption/cor_type_{}_epoch_{}_noise_{}0/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['random_seed']), allow_pickle=True)
 
 # ONE SEED
 

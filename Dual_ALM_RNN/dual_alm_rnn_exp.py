@@ -77,7 +77,7 @@ class DualALMRNNExp(object):
         self.logs_save_path = logs_save_path
 
     def init_sub_path(self, train_type):
-        if train_type == 'train_type_modular_corruption':
+        if train_type == 'train_type_modular_corruption' and not self.one_hot:
             self.sub_path = os.path.join(train_type, 'cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
@@ -85,8 +85,16 @@ class DualALMRNNExp(object):
                 'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
                 'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
                 'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
-        elif self.one_hot:
+        elif self.one_hot and train_type == 'train_type_modular_corruption':
             self.sub_path = os.path.join(train_type, 'onehot_cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
+                'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+        elif self.one_hot and train_type == 'train_type_modular':
+            self.sub_path = os.path.join(train_type, 'onehot',\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
                 'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
@@ -1963,10 +1971,10 @@ class DualALMRNNExp(object):
         results['right_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
 
         # 4. Bilateral photoinhibition (both left and right ALM)
-        print("Evaluating bilateral photoinhibition...")
-        bilateral_pert_hs, bilateral_pert_labels, _ = self._apply_bilateral_perturbation(
-            model, device, loader, model_type
-        )
+        # print("Evaluating bilateral photoinhibition...")
+        # bilateral_pert_hs, bilateral_pert_labels, _ = self._apply_bilateral_perturbation(
+        #     model, device, loader, model_type
+        # )
         # For bilateral, use the same CD and DBs, and compute per-hemi CD accuracy
         # n_trials = len(bilateral_pert_labels)
         # left_hs = bilateral_pert_hs[:, :, :bilateral_pert_hs.shape[2]//2]
