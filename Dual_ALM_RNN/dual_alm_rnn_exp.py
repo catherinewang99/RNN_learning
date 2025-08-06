@@ -1469,7 +1469,7 @@ class DualALMRNNExp(object):
             self.a, self.pert_begin, self.pert_end).to(device)
 
         model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
-
+        print("model: ", model_save_path)
         state_dict = torch.load(os.path.join(model_save_path, 'best_model.pth'), weights_only=True)
 
         model.load_state_dict(state_dict)

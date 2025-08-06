@@ -41,8 +41,10 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # C
 
 model = getattr(sys.modules[__name__], "TwoHemiRNNTanh")(configs, \
     a, pert_begin, pert_end).to(device)
-if configs['one_hot']:
+if configs['one_hot'] and configs['train_type'] == "train_type_modular_corruption":
     path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh/{}/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_256_random_seed_{}/n_epochs_{}_n_epochs_across_hemi_{}/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(configs['train_type'], configs['corruption_type'], configs['corruption_start_epoch'], configs['corruption_noise'], configs['random_seed'], configs['n_epochs'], configs['across_hemi_n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp'])
+elif configs['one_hot'] and configs['train_type'] == "train_type_modular":
+    path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh/{}/onehot/n_neurons_256_random_seed_{}/n_epochs_{}_n_epochs_across_hemi_{}/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(configs['train_type'], configs['random_seed'], configs['n_epochs'], configs['across_hemi_n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp'])
 elif configs['train_type'] == "train_type_modular_corruption":
     path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh/{}/cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_256_random_seed_{}/n_epochs_{}_n_epochs_across_hemi_{}/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(configs['train_type'], configs['corruption_type'], configs['corruption_start_epoch'], configs['corruption_noise'], configs['random_seed'], configs['n_epochs'], configs['across_hemi_n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp'])
 else:
