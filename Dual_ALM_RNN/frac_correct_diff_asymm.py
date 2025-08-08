@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.5), (1,1), (0.5,1), (0.2,1), (0.1,1), (0,1)] # Sane as BK
 
-input_asym = [(0, 1)] # Sane as BK
+# input_asym = [(0, 1)] # Sane as BK
 
 cd_acc_left, cd_acc_right = [], []
 cd_acc_rightpert_left, cd_acc_rightpert_right = [], []
@@ -50,18 +50,18 @@ control_std = []
 right_pert_std = []
 left_pert_std = []
 
-input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)] # Sane as BK
+input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)] # Same as BK
 
 for input_asym in input_asym:
     temp_control_acc = []
     temp_right_pert_acc = []
     temp_left_pert_acc = []
-    for seed in range(10):
-        path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(seed, input_asym[0], input_asym[1])
+    for seed in range(5,10):
+        path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh/train_type_modular/onehot/n_neurons_256_random_seed_{}/n_epochs_10_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(seed, input_asym[0], input_asym[1])
         results_dict = np.load(os.path.join(path, 'all_val_results_dict.npy'), allow_pickle=True)
-        temp_control_acc = np.mean([results_dict[-1]['control']['readout_accuracy_left'], results_dict[-1]['control']['readout_accuracy_right']])
-        temp_right_pert_acc = np.mean([results_dict[-1]['right_alm_pert']['readout_accuracy_left'], results_dict[-1]['right_alm_pert']['readout_accuracy_right']])
-        temp_left_pert_acc = np.mean([results_dict[-1]['left_alm_pert']['readout_accuracy_left'], results_dict[-1]['left_alm_pert']['readout_accuracy_right']])
+        temp_control_acc += [np.mean([results_dict[-1]['control']['readout_accuracy_left'], results_dict[-1]['control']['readout_accuracy_right']])]
+        temp_right_pert_acc += [np.mean([results_dict[-1]['right_alm_pert']['readout_accuracy_left'], results_dict[-1]['right_alm_pert']['readout_accuracy_right']])]
+        temp_left_pert_acc += [np.mean([results_dict[-1]['left_alm_pert']['readout_accuracy_left'], results_dict[-1]['left_alm_pert']['readout_accuracy_right']])]
     
     control_acc.append(np.mean(temp_control_acc))
     right_pert_acc.append(np.mean(temp_right_pert_acc))
@@ -79,7 +79,7 @@ plt.xlabel('Input asymmetry')
 plt.ylim(0.5, 1)
 plt.xticks([-1,0,1],[-1,0,1])
 plt.legend()
-plt.savefig('figs/frac_correct_diff_asymm.pdf')
+plt.savefig('figs/frac_correct_diff_asymm_onehot.pdf')
 plt.show()
 
 

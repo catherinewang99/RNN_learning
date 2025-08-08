@@ -459,8 +459,6 @@ class TwoHemiRNNTanh(nn.Module):
             # Keep right side unchanged
             xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
 
-
-
         else:
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
             xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
@@ -582,7 +580,5 @@ class TwoHemiRNNCellGeneral(nn.Module):
             h = (1-self.a)*h_pre + self.a*(self.full_recurrent(h_pre) + x_injected + noise)
 
         return h
-
-
 
 

@@ -22,8 +22,8 @@ else:
 
 # PLOT FOR ONE SEED
 results_dict = np.load(path + 'all_val_results_dict.npy', allow_pickle=True)
-# Cd readout accuracy when sides don't agree
 
+# CD vs readout accuracy
 f,ax=plt.subplots(1,2,figsize=(10,5), sharey='row')
 for i in range(len(results_dict)):
     ax[0].scatter(results_dict[i]['control']['cd_accuracy_left'], results_dict[i]['control']['readout_accuracy_left'], color='r', alpha=0.5)
@@ -36,6 +36,7 @@ ax[0].set_ylabel('Readout Accuracy')
 plt.suptitle('Control Accuracy')
 plt.show()
 
+# readout accuracy when sides don't agree
 f=plt.figure()
 for i in range(len(results_dict)):
     plt.scatter(results_dict[i]['control']['readout_accuracy_left'], results_dict[i]['control']['readout_accuracy_right'], color='black', alpha=0.5)

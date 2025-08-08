@@ -628,8 +628,8 @@ class DualALMRNNExp(object):
         # train
         train_save_path = os.path.join(self.configs['data_dir'], 'train')
 
-        train_sensory_inputs = np.load(os.path.join(train_save_path, 'sensory_inputs.npy'))
-        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy'))
+        train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
 
         train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
 
@@ -638,8 +638,8 @@ class DualALMRNNExp(object):
         # val
         val_save_path = os.path.join(self.configs['data_dir'], 'val')
 
-        val_sensory_inputs = np.load(os.path.join(val_save_path, 'sensory_inputs.npy'))
-        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels.npy'))
+        val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
 
         val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
 
@@ -647,8 +647,8 @@ class DualALMRNNExp(object):
 
         # load test data for later
         test_save_path = os.path.join(self.configs['data_dir'], 'test')
-        test_sensory_inputs = np.load(os.path.join(test_save_path, 'sensory_inputs.npy'))
-        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy'))
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
         
         test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
         test_loader = torch.utils.data.DataLoader(test_set, **params)
@@ -881,8 +881,8 @@ class DualALMRNNExp(object):
         # train
         train_save_path = os.path.join(self.configs['data_dir'], 'train')
  
-        train_sensory_inputs = np.load(os.path.join(train_save_path, 'sensory_inputs.npy'))
-        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy'))
+        train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
 
         train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
 
@@ -891,8 +891,8 @@ class DualALMRNNExp(object):
         # val
         val_save_path = os.path.join(self.configs['data_dir'], 'val')
 
-        val_sensory_inputs = np.load(os.path.join(val_save_path, 'sensory_inputs.npy'))
-        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels.npy'))
+        val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
 
         val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
 
@@ -900,8 +900,8 @@ class DualALMRNNExp(object):
 
         # load test data for later
         test_save_path = os.path.join(self.configs['data_dir'], 'test')
-        test_sensory_inputs = np.load(os.path.join(test_save_path, 'sensory_inputs.npy'))
-        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy'))
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
         
         test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
         test_loader = torch.utils.data.DataLoader(test_set, **params)
@@ -1934,10 +1934,10 @@ class DualALMRNNExp(object):
                 indices = np.arange(len(all_labels))
 
             # Left ALM readout
-            left_hs, _, left_pred_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True)
+            left_hs, _, left_pred_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True, hemi_agree=False)
             left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
             # Right ALM readout
-            right_hs, _, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True)
+            right_hs, _, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True, hemi_agree=False)
             right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
             # Left ALM CD
             left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs[indices], all_labels[indices], cds[0], cd_dbs[0])
