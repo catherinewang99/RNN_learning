@@ -439,7 +439,6 @@ class TwoHemiRNNTanh(nn.Module):
             xs_right_alm_mask = (torch.rand(n_trials,1,2) >= self.xs_right_alm_drop_p).float().to(xs.device)
         else:
             # input trial mask
-            n_trials = xs.size(0)
             xs_left_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_left_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
             xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
 
