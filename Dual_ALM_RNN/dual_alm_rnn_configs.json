@@ -19,7 +19,7 @@
     "sigma_rec_noise":0.1,
     "test_sigma_input_noise":0.1,
     "test_sigma_rec_noise":0.1, 
-    "random_seed":0,
+    "random_seed":5,
     "dataset_random_seed":111,
     "test_random_seed":777,
     "uni_pert_trials_prob":0,
@@ -35,7 +35,7 @@
     "init_cross_hemi_rel_factor":0.2,
 
 
-    "corruption_start_epoch":7,
+    "corruption_start_epoch":2,
     "corruption_noise": 1.4,
     "corruption_type":"gaussian",
 

@@ -2,6 +2,7 @@
 """
 Minimal 2-unit Dual ALM RNN Analysis
 Analyzes how sensory input strength asymmetries affect readout weights and cross-hemisphere connections
+Uses prebuilt functions from dual_alm_rnn_exp.py
 """
 
 import os
@@ -21,14 +22,14 @@ input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.5), (1.0,1.0),
               (0.5,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)]  # Same as BK
 
 def train_minimal_rnn(configs, left_amp, right_amp, exp):
-    """Train a minimal RNN with specific input amplitudes"""
+    """Train a minimal RNN with specific input amplitudes using prebuilt functions"""
     print(f"\nTraining RNN with left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
     
-    # Modify for minimal RNN
+    # Modify configs for minimal RNN
     configs['n_neurons'] = 2  # Only 2 units total
     configs['n_epochs'] = 10  # Train for 10 epochs
     configs['one_hot'] = 1    # Use one-hot encoding
-
+    
     # Update configs for this specific training run
     configs['xs_left_alm_amp'] = left_amp
     configs['xs_right_alm_amp'] = right_amp
@@ -38,7 +39,7 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
     
     # Set device
-    device = torch.device("mps")  # Use CPU to avoid MPS issues
+    device = torch.device("cpu")  # Use CPU to avoid MPS issues
     model = model.to(device)
     
     # Load data
@@ -61,80 +62,48 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     optimizer = optim.Adam(model.parameters(), lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
     loss_fct = nn.BCEWithLogitsLoss()
     
-    # Training loop
-    train_losses = []
-    val_losses = []
-    train_scores = []
-    val_scores = []
+    # Training loop using prebuilt functions
+    all_epoch_train_losses = []
+    all_epoch_train_scores = []
+    all_epoch_val_losses = []
+    all_epoch_val_scores = []
     
     for epoch in range(configs['n_epochs']):
-        # Training
-        model.train()
-        epoch_train_loss = 0
-        epoch_train_correct = 0
-        epoch_train_total = 0
+        print(f'\nEpoch {epoch+1}/{configs["n_epochs"]}')
         
-        for batch_idx, (inputs, labels) in enumerate(train_loader):
-            inputs, labels = inputs.to(device), labels.to(device)
-            
-            optimizer.zero_grad()
-            hs, zs = model(inputs)
-            
-            # Calculate loss
-            loss = loss_fct(zs[:,-1,:], labels.float())
-            loss.backward()
-            optimizer.step()
-            
-            # Calculate accuracy
-            preds = (zs[:,-1,:] >= 0).long()
-            correct = (preds == labels).sum().item()
-            total = labels.size(0)
-            
-            epoch_train_loss += loss.item()
-            epoch_train_correct += correct
-            epoch_train_total += total
+        # Use prebuilt train_helper function
+        train_losses, train_scores = exp.train_helper(model, device, train_loader, optimizer, epoch, loss_fct)
         
-        # Validation
-        model.eval()
-        epoch_val_loss = 0
-        epoch_val_correct = 0
-        epoch_val_total = 0
+        # Use prebuilt val_helper function
+        val_loss, val_score = exp.val_helper(model, device, val_loader, loss_fct)
         
-        with torch.no_grad():
-            for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                hs, zs = model(inputs)
-                
-                loss = loss_fct(zs[:,-1,:], labels.float())
-                preds = (zs[:,-1,:] >= 0).long()
-                correct = (preds == labels).sum().item()
-                total = labels.size(0)
-                
-                epoch_val_loss += loss.item()
-                epoch_val_correct += correct
-                epoch_val_total += total
+        # Convert tensors to numpy safely - detach gradients first
+        if isinstance(train_losses[0], torch.Tensor):
+            train_losses_np = [loss.detach().cpu().numpy() if loss.requires_grad else loss.cpu().numpy() for loss in train_losses]
+        else:
+            train_losses_np = train_losses
+            
+        if isinstance(train_scores[0], torch.Tensor):
+            train_scores_np = [score.detach().cpu().numpy() if score.requires_grad else score.cpu().numpy() for score in train_scores]
+        else:
+            train_scores_np = train_scores
         
         # Record metrics
-        avg_train_loss = epoch_train_loss / len(train_loader)
-        avg_val_loss = epoch_val_loss / len(val_loader)
-        train_acc = 100. * epoch_train_correct / epoch_train_total
-        val_acc = 100. * epoch_val_correct / epoch_val_total
+        all_epoch_train_losses.extend(train_losses_np)
+        all_epoch_train_scores.extend(train_scores_np)
+        all_epoch_val_losses.append(val_loss)
+        all_epoch_val_scores.append(val_score)
         
-        train_losses.append(avg_train_loss)
-        val_losses.append(avg_val_loss)
-        train_scores.append(train_acc)
-        val_scores.append(val_acc)
-        
-        print(f'Epoch {epoch+1}/{configs["n_epochs"]}: '
-              f'Train Loss: {avg_train_loss:.4f}, Train Acc: {train_acc:.1f}%, '
-              f'Val Loss: {avg_val_loss:.4f}, Val Acc: {val_acc:.1f}%')
+        print(f'Epoch {epoch+1} Summary: Train Loss: {np.mean(train_losses_np):.4f}, '
+              f'Train Acc: {np.mean(train_scores_np)*100:.1f}%, '
+              f'Val Loss: {val_loss:.4f}, Val Acc: {val_score*100:.1f}%')
     
     # Extract final weights
     final_weights = {}
     for name, param in model.named_parameters():
         final_weights[name] = param.data.cpu().numpy().copy()
     
-    return final_weights, train_losses, val_losses, train_scores, val_scores
+    return final_weights, all_epoch_train_losses, all_epoch_val_losses, all_epoch_train_scores, all_epoch_val_scores
 
 def analyze_weight_relationships(weights_dict, left_amp, right_amp):
     """Analyze the weight relationships of interest"""
@@ -242,7 +211,7 @@ def plot_results(all_results):
 def main():
     """Main analysis function"""
     print("Starting Minimal 2-Unit Dual ALM RNN Analysis")
-
+    print("Using prebuilt functions from dual_alm_rnn_exp.py")
     
     # Initialize experiment
     exp = DualALMRNNExp()
@@ -260,9 +229,9 @@ def main():
         print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
         print(f"{'='*60}")
         
-        # Train the RNN
+        # Train the RNN using prebuilt functions
         weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn(
-            configs, left_amp, right_amp, exp
+            exp.configs.copy(), left_amp, right_amp, exp
         )
         
         # Analyze weight relationships
