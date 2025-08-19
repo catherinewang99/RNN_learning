@@ -720,7 +720,8 @@ class DualALMRNNExp(object):
             model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
 
             train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
-
+            total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
+            np.save(os.path.join(logs_save_path, 'all_hs_corruption_epoch_{}.npy'.format(epoch)), total_hs)
               # After optimizer.step() and epoch ends
             val_results = self.eval_with_perturbations(
                 model=model,
@@ -773,12 +774,12 @@ class DualALMRNNExp(object):
             print('')
 
         # After training
-        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy().flatten()
-        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy().flatten()
+        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy()
+        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy()
         # For left ALM readout (maps left ALM hidden units to output)
-        left_readout_weights = model.readout_linear_left_alm.weight.data.cpu().numpy().flatten()  # shape: (n_left_neurons,)
+        left_readout_weights = model.readout_linear_left_alm.weight.data.cpu().numpy()  # shape: (n_left_neurons,)
         # For right ALM readout (maps right ALM hidden units to output)
-        right_readout_weights = model.readout_linear_right_alm.weight.data.cpu().numpy().flatten()  # shape: (n_right_neurons,)
+        right_readout_weights = model.readout_linear_right_alm.weight.data.cpu().numpy()  # shape: (n_right_neurons,)
 
         # Save to file, append to a list, or log as needed
         np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_final.npy"), left_input_weights)
@@ -968,28 +969,11 @@ class DualALMRNNExp(object):
             # Add corruption to the training data
             if epoch >= self.configs['corruption_start_epoch']:
                 print('Adding corruption to the training data at epoch {}'.format(epoch))
-                # Add Gaussian noise (mean 0, std from configs['corruption_noise'])
 
                 model.corrupt = True
-                # Generate noise only for the sample period and early delay epoch, rest is zero
-                # noise = np.zeros(train_loader.dataset.tensors[0].shape, dtype=np.float32)
-                # # Get time indices for sample and early delay
-                # T = noise.shape[1]
-                # sample_begin = self.sample_begin
-                # delay_begin = self.delay_begin
-                # # Set noise for sample and early delay period (from sample_begin to delay_begin, inclusive)
-                # noise[:, sample_begin:delay_begin+1, :] = np.random.normal(
-                #     loc=0.0,
-                #     scale=self.configs['corruption_noise'],
-                #     size=(noise.shape[0], delay_begin - sample_begin + 1, noise.shape[2])
-                # )
-                # if isinstance(train_loader.dataset.tensors[0], torch.Tensor):
-                #     noise = torch.from_numpy(noise).type_as(train_loader.dataset.tensors[0])
-                # train_loader.dataset.tensors = (
-                #     train_loader.dataset.tensors[0] + noise,
-                #     train_loader.dataset.tensors[1]
-                # )
 
+                total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=True)
+                np.save(os.path.join(logs_save_path, 'all_hs_corruption_epoch_{}.npy'.format(epoch)), total_hs)
 
             epoch_begin_time = time.time()
 
@@ -1053,12 +1037,12 @@ class DualALMRNNExp(object):
             print('')
 
         # After training
-        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy().flatten()
-        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy().flatten()
+        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy()
+        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy()
         # For left ALM readout (maps left ALM hidden units to output)
-        left_readout_weights = model.readout_linear_left_alm.weight.data.cpu().numpy().flatten()  # shape: (n_left_neurons,)
+        left_readout_weights = model.readout_linear_left_alm.weight.data.cpu().numpy()  # shape: (n_left_neurons,)
         # For right ALM readout (maps right ALM hidden units to output)
-        right_readout_weights = model.readout_linear_right_alm.weight.data.cpu().numpy().flatten()  # shape: (n_right_neurons,)
+        right_readout_weights = model.readout_linear_right_alm.weight.data.cpu().numpy()  # shape: (n_right_neurons,)
 
         # Save to file, append to a list, or log as needed
         np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_final.npy"), left_input_weights)
@@ -1789,7 +1773,7 @@ class DualALMRNNExp(object):
 
     def get_neurons_trace(self, model, device, loader, model_type, 
                         hemi_type='left_ALM', recompute=False, return_pred_labels=False,
-                        return_zs=False, hemi_agree=True):
+                        return_zs=False, hemi_agree=True, corrupt=False):
         '''
         Return:
         numpy arrays
@@ -1805,7 +1789,7 @@ class DualALMRNNExp(object):
         total_hs = []
         total_labels = []
 
-        model.corrupt=False
+        model.corrupt=corrupt
 
         model.eval()
 

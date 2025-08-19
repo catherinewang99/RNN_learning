@@ -101,58 +101,81 @@ fig.savefig(f"figs/w_hh_linear_rr_delta_heatmaps_onehot_{configs['one_hot']}_tra
 
 plt.show()
 
+if False: # SVD stuff
+
+    import numpy.linalg as la
+
+    # Perform SVD on each delta matrix and store singular values and first singular vectors
+    svd_results = []
+    for i, delta in enumerate(rr_deltas):
+        # SVD: delta = U S V^T
+        U, S, Vh = la.svd(delta, full_matrices=False)
+        svd_results.append({
+            'U': U,
+            'S': S,
+            'Vh': Vh,
+            'epoch_pair': (i+1, i+2)
+        })
+
+    # Plot singular values across epochs
+    fig_sv, ax_sv = plt.subplots(figsize=(8, 5))
+    for i, res in enumerate(svd_results):
+        ax_sv.plot(res['S'], 'o-', label=f'Epoch {res["epoch_pair"][0]}→{res["epoch_pair"][1]}')
+    ax_sv.set_xlabel('Singular Value Index')
+    ax_sv.set_ylabel('Singular Value')
+    ax_sv.set_title('Singular Values of Δ w_hh_linear_rr Across Epochs')
+    ax_sv.legend(fontsize=8, ncol=2)
+    ax_sv.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig_sv.savefig(f"figs/w_hh_linear_rr_delta_singular_values_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
+
+    # Compare first left singular vector (U[:,0]) across epochs
+    fig_u, ax_u = plt.subplots(figsize=(10, 6))
+    for i, res in enumerate(svd_results):
+        ax_u.plot(res['U'][:, 0], label=f'Epoch {res["epoch_pair"][0]}→{res["epoch_pair"][1]}')
+    ax_u.set_xlabel('Neuron Index')
+    ax_u.set_ylabel('First Left Singular Vector (U[:,0])')
+    ax_u.set_title('First Left Singular Vector of Δ w_hh_linear_rr Across Epochs')
+    ax_u.legend(fontsize=8, ncol=2)
+    ax_u.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig_u.savefig(f"figs/w_hh_linear_rr_delta_first_left_singular_vector_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
+
+    # Compare first right singular vector (Vh[0,:]) across epochs
+    fig_v, ax_v = plt.subplots(figsize=(10, 6))
+    for i, res in enumerate(svd_results):
+        ax_v.plot(res['Vh'][0, :], label=f'Epoch {res["epoch_pair"][0]}→{res["epoch_pair"][1]}')
+    ax_v.set_xlabel('Neuron Index')
+    ax_v.set_ylabel('First Right Singular Vector (Vh[0,:])')
+    ax_v.set_title('First Right Singular Vector of Δ w_hh_linear_rr Across Epochs')
+    ax_v.legend(fontsize=8, ncol=2)
+    ax_v.grid(True, alpha=0.3)
+    plt.tight_layout()
+    fig_v.savefig(f"figs/w_hh_linear_rr_delta_first_right_singular_vector_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
+
+    plt.show()
 
 
-import numpy.linalg as la
+# Relationship between strength of sensory input and weight change across epochs
+sensory_input_weights_r = np.load(os.path.join(path, 'input_weights_right_epoch_final.npy')) # if one hot, then shape is (n_neurons, 2)
 
-# Perform SVD on each delta matrix and store singular values and first singular vectors
-svd_results = []
-for i, delta in enumerate(rr_deltas):
-    # SVD: delta = U S V^T
-    U, S, Vh = la.svd(delta, full_matrices=False)
-    svd_results.append({
-        'U': U,
-        'S': S,
-        'Vh': Vh,
-        'epoch_pair': (i+1, i+2)
-    })
 
-# Plot singular values across epochs
-fig_sv, ax_sv = plt.subplots(figsize=(8, 5))
-for i, res in enumerate(svd_results):
-    ax_sv.plot(res['S'], 'o-', label=f'Epoch {res["epoch_pair"][0]}→{res["epoch_pair"][1]}')
-ax_sv.set_xlabel('Singular Value Index')
-ax_sv.set_ylabel('Singular Value')
-ax_sv.set_title('Singular Values of Δ w_hh_linear_rr Across Epochs')
-ax_sv.legend(fontsize=8, ncol=2)
-ax_sv.grid(True, alpha=0.3)
-plt.tight_layout()
-fig_sv.savefig(f"figs/w_hh_linear_rr_delta_singular_values_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
-
-# Compare first left singular vector (U[:,0]) across epochs
-fig_u, ax_u = plt.subplots(figsize=(10, 6))
-for i, res in enumerate(svd_results):
-    ax_u.plot(res['U'][:, 0], label=f'Epoch {res["epoch_pair"][0]}→{res["epoch_pair"][1]}')
-ax_u.set_xlabel('Neuron Index')
-ax_u.set_ylabel('First Left Singular Vector (U[:,0])')
-ax_u.set_title('First Left Singular Vector of Δ w_hh_linear_rr Across Epochs')
-ax_u.legend(fontsize=8, ncol=2)
-ax_u.grid(True, alpha=0.3)
-plt.tight_layout()
-fig_u.savefig(f"figs/w_hh_linear_rr_delta_first_left_singular_vector_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
-
-# Compare first right singular vector (Vh[0,:]) across epochs
-fig_v, ax_v = plt.subplots(figsize=(10, 6))
-for i, res in enumerate(svd_results):
-    ax_v.plot(res['Vh'][0, :], label=f'Epoch {res["epoch_pair"][0]}→{res["epoch_pair"][1]}')
-ax_v.set_xlabel('Neuron Index')
-ax_v.set_ylabel('First Right Singular Vector (Vh[0,:])')
-ax_v.set_title('First Right Singular Vector of Δ w_hh_linear_rr Across Epochs')
-ax_v.legend(fontsize=8, ncol=2)
-ax_v.grid(True, alpha=0.3)
-plt.tight_layout()
-fig_v.savefig(f"figs/w_hh_linear_rr_delta_first_right_singular_vector_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
-
+summed_deltas = np.sum(rr_deltas[2], axis=0)
+plt.scatter(np.mean(sensory_input_weights_r, axis=1), summed_deltas)
+plt.xlabel('Sensory Input Weight')
+plt.ylabel('Summed Delta')
+plt.title('Relationship between strength of sensory input and weight change epoch 3→4')
 plt.show()
+
+
+
+output_weights_r = np.load(os.path.join(path, 'readout_weights_right_epoch_final.npy'))
+plt.scatter(output_weights_r, summed_deltas)
+plt.xlabel('Output Weight')
+plt.ylabel('Summed Delta')
+plt.title('Relationship between strength of output weight and weight change epoch 3→4')
+plt.show()
+
+
 
 
