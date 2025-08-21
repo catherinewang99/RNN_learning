@@ -58,8 +58,15 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
     val_loader = data.DataLoader(val_set, batch_size=configs['bs'], shuffle=False)
     
+    # Explicitly include readout weights
+    trainable_params = []
+    for name, param in model.named_parameters():
+        if 'rnn_cell' in name or 'readout_linear' in name:
+            trainable_params.append(param)
+
     # Initialize optimizer and loss
-    optimizer = optim.Adam(model.parameters(), lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
+    optimizer = optim.Adam(trainable_params, lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
+    # optimizer = optim.Adam(model.parameters(), lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
     loss_fct = nn.BCEWithLogitsLoss()
     
     # Training loop using prebuilt functions
@@ -105,35 +112,118 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     
     return final_weights, all_epoch_train_losses, all_epoch_val_losses, all_epoch_train_scores, all_epoch_val_scores
 
-def analyze_weight_relationships(weights_dict, left_amp, right_amp):
+
+
+def brute_force_train_minimal_rnn(configs, left_amp, right_amp, exp):
+    """Brute force train a minimal RNN with specific input amplitudes using prebuilt functions"""
+    print(f"\nTraining RNN with left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
+    
+    # Modify configs for minimal RNN
+    configs['n_neurons'] = 2  # Only 2 units total
+    configs['n_epochs'] = 10  # Train for 10 epochs
+    configs['one_hot'] = 1    # Use one-hot encoding
+    
+    # Update configs for this specific training run
+    configs['xs_left_alm_amp'] = left_amp
+    configs['xs_right_alm_amp'] = right_amp
+    
+    # Initialize model
+    model_type = configs['model_type']
+    model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
+    
+    # Set device
+    device = torch.device("cpu")  # Use CPU to avoid MPS issues
+    model = model.to(device)
+    
+    # Load data
+    train_save_path = os.path.join(exp.configs['data_dir'], 'train')
+    train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs.npy'))
+    train_trial_type_labels = np.load(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'))
+    
+    val_save_path = os.path.join(exp.configs['data_dir'], 'val')
+    val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs.npy'))
+    val_trial_type_labels = np.load(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'))
+    
+    # Create data loaders
+    train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
+    train_loader = data.DataLoader(train_set, batch_size=configs['bs'], shuffle=True, drop_last=True)
+    
+    val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
+    val_loader = data.DataLoader(val_set, batch_size=configs['bs'], shuffle=False)
+    
+    grid = np.linspace(0.0, 1.0, 50)
+    best_loss = float('inf')
+    best_w = None
+
+    for W_l_readout, W_r_readout, W_l_r, W_r_r, W_l_r, W_r_l in itertools.product(grid, repeat=6):
+
+
+
+
+def analyze_weight_relationships(configs, weights_dict, left_amp, right_amp):
     """Analyze the weight relationships of interest"""
     results = {}
     
-    # Readout weights for each hemisphere
-    results['readout_left'] = weights_dict['readout_linear_left_alm.weight'][0, 0]  # Left unit to left output
-    results['readout_right'] = weights_dict['readout_linear_right_alm.weight'][0, 0]  # Right unit to right output
+    if configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+        results['readout_all'] = weights_dict['readout_linear.weight'] # Left unit to left output
+        num_neurons = 2
+        results['output_ratio'] = np.abs(weights_dict['readout_linear.weight'][0,:num_neurons//2] / weights_dict['readout_linear.weight'][0,num_neurons//2:]) # Left output : right output
+        print(results['output_ratio'])
+    else:
+        # Readout weights for each hemisphere
+        results['readout_left'] = weights_dict['readout_linear_left_alm.weight'] # Left unit to left output
+        results['readout_right'] = weights_dict['readout_linear_right_alm.weight']  # Right unit to right output
     
     # Input projection weights
-    results['input_left_to_left'] = weights_dict['w_xh_linear_left_alm.weight'][0, 0]  # Left input to left unit
-    results['input_left_to_right'] = weights_dict['w_xh_linear_left_alm.weight'][0, 1]  # Left input to right unit
-    results['input_right_to_left'] = weights_dict['w_xh_linear_right_alm.weight'][0, 0]  # Right input to left unit
-    results['input_right_to_right'] = weights_dict['w_xh_linear_right_alm.weight'][0, 1]  # Right input to right unit
+    results['input_left_to_left'] = weights_dict['w_xh_linear_left_alm.weight'] # Left input to left unit
+    results['input_right_to_right'] = weights_dict['w_xh_linear_right_alm.weight']  # Right input to right unit
     
     # Recurrent weights
-    results['recurrent_left_to_left'] = weights_dict['rnn_cell.w_hh_linear_ll.weight'][0, 0]
-    results['recurrent_right_to_right'] = weights_dict['rnn_cell.w_hh_linear_rr.weight'][0, 0]
-    results['recurrent_left_to_right'] = weights_dict['rnn_cell.w_hh_linear_lr.weight'][0, 0]
-    results['recurrent_right_to_left'] = weights_dict['rnn_cell.w_hh_linear_rl.weight'][0, 0]
+    results['recurrent_left_to_left'] = weights_dict['rnn_cell.w_hh_linear_ll.weight']
+    results['recurrent_right_to_right'] = weights_dict['rnn_cell.w_hh_linear_rr.weight']
+    results['recurrent_left_to_right'] = weights_dict['rnn_cell.w_hh_linear_lr.weight']
+    results['recurrent_right_to_left'] = weights_dict['rnn_cell.w_hh_linear_rl.weight']
     
-    # Key relationships you mentioned
-    results['left_path'] = results['input_left_to_left'] * results['readout_left']  # Left sensory → left unit → left output
-    results['cross_path'] = results['input_right_to_left'] * results['readout_left']  # Right sensory → left unit → left output
+    # Key relationships in paths
+    if configs['model_type'] == 'TwoHemiRNNTanh':
+        results['left_path'] = results['input_left_to_left'] * results['readout_left']  # Left sensory → left unit → left output
+        results['cross_path'] = results['input_right_to_left'] * results['readout_left']  # Right sensory → left unit → left output
     
     results['left_amp'] = left_amp
     results['right_amp'] = right_amp
     results['input_ratio'] = left_amp / right_amp if right_amp > 0 else float('inf')
     
+
     return results
+
+def plot_results_single_readout(all_results):
+    """Create comprehensive visualizations for single readout model"""
+    # Extract data for plotting
+    left_amps = [r['left_amp'] for r in all_results]
+    right_amps = [r['right_amp'] for r in all_results]
+    input_ratios = [r['input_ratio'] for r in all_results]
+    
+    readout_all = [r['output_ratio'][0] for r in all_results]
+    
+    # Create figure with subplots
+    fig = plt.figure(figsize=(15, 12))
+    # plt.title('Minimal 2-Unit Dual ALM RNN: Input Asymmetry Effects', fontsize=16)
+    
+    # Plot 1: Readout weights ratio vs input strength ratios
+    ax1 = fig.add_subplot(1, 1, 1)
+    ax1.plot(input_ratios, readout_all, 'ro-', label='Readout', linewidth=2, markersize=8)
+    ax1.set_xlabel('Input Strength Ratio (Left/Right)')
+    ax1.set_ylabel('Readout Weight')
+    ax1.set_title('Readout Weights vs Input Strength Ratio')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xscale('log')
+    
+    plt.tight_layout()
+    plt.savefig('minimal_rnn_analysis_single_readout.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    return fig
 
 def plot_results(all_results):
     """Create comprehensive visualizations"""
@@ -222,36 +312,46 @@ def main():
         exp.generate_dataset_onehot()
     
     # Train RNN for each input asymmetry
-    all_results = []
+
+    # Load results if they exist
+    if os.path.exists('minimal_rnn_results.npy'):
+        all_results = np.load('minimal_rnn_results.npy', allow_pickle=True).tolist()
+        print("\nResults loaded from 'minimal_rnn_results.npy'")
+    else:
+        all_results = []
     
-    for left_amp, right_amp in input_asym:
-        print(f"\n{'='*60}")
-        print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
-        print(f"{'='*60}")
-        
-        # Train the RNN using prebuilt functions
-        weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn(
-            exp.configs.copy(), left_amp, right_amp, exp
-        )
-        
-        # Analyze weight relationships
-        results = analyze_weight_relationships(weights, left_amp, right_amp)
-        all_results.append(results)
-        
-        # Print key results
-        print(f"\nKey Results:")
-        print(f"  Left readout weight: {results['readout_left']:.4f}")
-        print(f"  Right readout weight: {results['readout_right']:.4f}")
-        print(f"  Left pathway weight: {results['left_path']:.4f}")
-        print(f"  Cross pathway weight: {results['cross_path']:.4f}")
-    
+        for left_amp, right_amp in input_asym:
+            print(f"\n{'='*60}")
+            print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
+            print(f"{'='*60}")
+            
+            # Train the RNN using prebuilt functions
+            weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn(
+                exp.configs.copy(), left_amp, right_amp, exp
+            )
+            
+            # Analyze weight relationships
+            results = analyze_weight_relationships(exp.configs, weights, left_amp, right_amp)
+            all_results.append(results)
+            
+            # Print key results
+            # print(f"\nKey Results:")
+            # print(f"  Left readout weight: {results['readout_left'].shape}")
+            # print(f"  Right readout weight: {results['readout_right'].shape}")
+            # print(f"  Left pathway weight: {results['left_path'].shape}")
+            # print(f"  Cross pathway weight: {results['cross_path'].shape}")
+        # Save results
+        np.save('minimal_rnn_results.npy', all_results)
+        print("\nResults saved to 'minimal_rnn_results.npy'")
+
     # Create visualizations
     print("\nCreating visualizations...")
-    fig = plot_results(all_results)
+    if exp.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+        fig = plot_results_single_readout(all_results)
+    else:
+        fig = plot_results(all_results)
     
-    # Save results
-    np.save('minimal_rnn_results.npy', all_results)
-    print("\nResults saved to 'minimal_rnn_results.npy'")
+
     
     # Print summary statistics
     print("\n" + "="*60)

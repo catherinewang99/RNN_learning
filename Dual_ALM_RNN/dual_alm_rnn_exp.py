@@ -1159,28 +1159,37 @@ class DualALMRNNExp(object):
 
             dec_begin = self.delay_begin            
 
+            # INSERT_YOUR_CODE
+            if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+                # For single readout, zs is (n_trials, T, 1)
+                loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))
+            else:
+                # BCEWithLogitsLoss requires that the target be float between 0 and 1.
+                loss_left_alm = loss_fct(zs[:,dec_begin:,0], labels.float()[:,None].expand(-1,self.T-dec_begin))
+                loss_right_alm = loss_fct(zs[:,dec_begin:,1], labels.float()[:,None].expand(-1,self.T-dec_begin))
 
-            # BCEWithLogitsLoss requires that the target be float between 0 and 1.
-            loss_left_alm = loss_fct(zs[:,dec_begin:,0], labels.float()[:,None].expand(-1,self.T-dec_begin))
-            loss_right_alm = loss_fct(zs[:,dec_begin:,1], labels.float()[:,None].expand(-1,self.T-dec_begin))
 
-
-            loss = loss_left_alm + loss_right_alm
+                loss = loss_left_alm + loss_right_alm
 
 
             loss.backward()
 
             optimizer.step()
 
-
             # Evaluate the score.
-            preds_left_alm = (zs[:,-1,0] >= 0).long()
-            preds_right_alm = (zs[:,-1,1] >= 0).long()
 
-            score_left_alm = accuracy_score(labels.cpu().data.numpy(), preds_left_alm.cpu().data.numpy())
-            score_right_alm = accuracy_score(labels.cpu().data.numpy(), preds_right_alm.cpu().data.numpy())
+            if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+                preds = (zs[:,-1,0] >= 0).long()
+                score = accuracy_score(labels.cpu().data.numpy(), preds.cpu().data.numpy())
 
-            score = (score_left_alm+score_right_alm)/2
+            else:
+                preds_left_alm = (zs[:,-1,0] >= 0).long()
+                preds_right_alm = (zs[:,-1,1] >= 0).long()
+
+                score_left_alm = accuracy_score(labels.cpu().data.numpy(), preds_left_alm.cpu().data.numpy())
+                score_right_alm = accuracy_score(labels.cpu().data.numpy(), preds_right_alm.cpu().data.numpy())
+
+                score = (score_left_alm+score_right_alm)/2
 
             losses.append(loss)
             scores.append(score)
@@ -1221,11 +1230,14 @@ class DualALMRNNExp(object):
                 zs: (n_trials, T, 2)
                 '''
                 _, zs = model(inputs)
+                if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+                    # For single readout, zs is (n_trials, T, 1)
+                    loss = loss_fct(zs[:,-1,0], labels.float()).item()*len(labels) # BCEWithLogitsLoss requires that the target be float between 0 and 1.
+                else:
+                    loss_left_alm = loss_fct(zs[:,-1,0], labels.float()).item()*len(labels) # BCEWithLogitsLoss requires that the target be float between 0 and 1.
+                    loss_right_alm = loss_fct(zs[:,-1,1], labels.float()).item()*len(labels) # BCEWithLogitsLoss requires that the target be float between 0 and 1.
 
-                loss_left_alm = loss_fct(zs[:,-1,0], labels.float()).item()*len(labels) # BCEWithLogitsLoss requires that the target be float between 0 and 1.
-                loss_right_alm = loss_fct(zs[:,-1,1], labels.float()).item()*len(labels) # BCEWithLogitsLoss requires that the target be float between 0 and 1.
-
-                loss = loss_left_alm + loss_right_alm
+                    loss = loss_left_alm + loss_right_alm
 
 
                 total_loss += loss
@@ -1233,14 +1245,21 @@ class DualALMRNNExp(object):
 
                 # Evaluate the score.
 
+                if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
 
-                preds_left_alm = (zs[:,-1,0] >= 0).long()
-                preds_right_alm = (zs[:,-1,1] >= 0).long()
+                    preds = (zs[:,-1,0] >= 0).long()
+                    score = accuracy_score(labels.cpu().data.numpy(), preds.cpu().data.numpy())
+                    total_score += score
 
-                n_correct_left_alm = accuracy_score(labels.cpu().data.numpy(), preds_left_alm.cpu().data.numpy(), normalize=False)
-                n_correct_right_alm = accuracy_score(labels.cpu().data.numpy(), preds_right_alm.cpu().data.numpy(), normalize=False)
+                else:
 
-                total_score += (n_correct_left_alm+n_correct_right_alm)/2
+                    preds_left_alm = (zs[:,-1,0] >= 0).long()
+                    preds_right_alm = (zs[:,-1,1] >= 0).long()
+
+                    n_correct_left_alm = accuracy_score(labels.cpu().data.numpy(), preds_left_alm.cpu().data.numpy(), normalize=False)
+                    n_correct_right_alm = accuracy_score(labels.cpu().data.numpy(), preds_right_alm.cpu().data.numpy(), normalize=False)
+
+                    total_score += (n_correct_left_alm+n_correct_right_alm)/2
 
 
         total_loss /= trial_count
