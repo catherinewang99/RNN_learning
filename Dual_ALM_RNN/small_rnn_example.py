@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 import time
 from dual_alm_rnn_exp import DualALMRNNExp
 import dual_alm_rnn_models
+import itertools
+import time
 
 # Input asymmetry combinations to test
 input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.5), (1.0,1.0), 
@@ -155,9 +157,32 @@ def brute_force_train_minimal_rnn(configs, left_amp, right_amp, exp):
     best_loss = float('inf')
     best_w = None
 
-    for W_l_readout, W_r_readout, W_l_r, W_r_r, W_l_r, W_r_l in itertools.product(grid, repeat=6):
+    for W_l_readout, W_r_readout, W_l_l, W_r_r, W_l_r, W_r_l in itertools.product(grid, repeat=6):
+
+        custom_weights = {
+            'w_hh_linear_ll': torch.tensor([[W_l_l]]),
+            'w_hh_linear_rr': torch.tensor([[W_r_r]]),
+            'w_hh_linear_lr': torch.tensor([[W_l_r]]),
+            'w_hh_linear_rl': torch.tensor([[W_r_l]]),
+            'readout_linear': torch.tensor([[W_l_readout, W_r_readout]]),
+        }
+
+        _, zs = model.forward_with_custom_weights(torch.tensor(train_sensory_inputs), custom_weights) # (n_trials, T, 1)
+
+        loss_fct = nn.BCEWithLogitsLoss()
+        
+        # loss = loss_fct(zs, torch.tensor(train_trial_type_labels))
+        labels = torch.tensor(train_trial_type_labels)
+        dec_begin = exp.delay_begin            
+
+        loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,exp.T-dec_begin))
 
 
+        if loss < best_loss:
+            best_loss = loss
+            best_w = custom_weights
+
+    return best_w
 
 
 def analyze_weight_relationships(configs, weights_dict, left_amp, right_amp):
@@ -298,7 +323,7 @@ def plot_results(all_results):
     
     return fig
 
-def main():
+def main(training_method):
     """Main analysis function"""
     print("Starting Minimal 2-Unit Dual ALM RNN Analysis")
     print("Using prebuilt functions from dual_alm_rnn_exp.py")
@@ -312,37 +337,55 @@ def main():
         exp.generate_dataset_onehot()
     
     # Train RNN for each input asymmetry
+    if training_method == "brute_force":
+        if os.path.exists('minimal_rnn_results_brute_force.npy'):
+            all_results = np.load('minimal_rnn_results_brute_force.npy', allow_pickle=True).tolist()
+            print("\nResults loaded from 'minimal_rnn_results_brute_force.npy'")
 
-    # Load results if they exist
-    if os.path.exists('minimal_rnn_results.npy'):
-        all_results = np.load('minimal_rnn_results.npy', allow_pickle=True).tolist()
-        print("\nResults loaded from 'minimal_rnn_results.npy'")
+        else: # find weights
+            all_results = []
+            for left_amp, right_amp in input_asym:
+                start_time = time.time()
+                weights = brute_force_train_minimal_rnn(exp.configs, left_amp, right_amp, exp)
+                print(f"Brute force step for left_amp={left_amp}, right_amp={right_amp} took {time.time() - start_time:.2f} seconds")
+                results = analyze_weight_relationships(exp.configs, weights, left_amp, right_amp)
+                all_results.append(results)
+
+            np.save('minimal_rnn_results_brute_force.npy', all_results)
+            print("\nResults saved to 'minimal_rnn_results_brute_force.npy'")
     else:
-        all_results = []
-    
-        for left_amp, right_amp in input_asym:
-            print(f"\n{'='*60}")
-            print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
-            print(f"{'='*60}")
-            
-            # Train the RNN using prebuilt functions
-            weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn(
-                exp.configs.copy(), left_amp, right_amp, exp
-            )
-            
-            # Analyze weight relationships
-            results = analyze_weight_relationships(exp.configs, weights, left_amp, right_amp)
-            all_results.append(results)
-            
-            # Print key results
-            # print(f"\nKey Results:")
-            # print(f"  Left readout weight: {results['readout_left'].shape}")
-            # print(f"  Right readout weight: {results['readout_right'].shape}")
-            # print(f"  Left pathway weight: {results['left_path'].shape}")
-            # print(f"  Cross pathway weight: {results['cross_path'].shape}")
-        # Save results
-        np.save('minimal_rnn_results.npy', all_results)
-        print("\nResults saved to 'minimal_rnn_results.npy'")
+        # Load results if they exist
+        if os.path.exists('minimal_rnn_results.npy'):
+            all_results = np.load('minimal_rnn_results.npy', allow_pickle=True).tolist()
+            print("\nResults loaded from 'minimal_rnn_results.npy'")
+
+
+        else:
+            all_results = []
+        
+            for left_amp, right_amp in input_asym:
+                print(f"\n{'='*60}")
+                print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
+                print(f"{'='*60}")
+                
+                # Train the RNN using prebuilt functions
+                weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn(
+                    exp.configs.copy(), left_amp, right_amp, exp
+                )
+                
+                # Analyze weight relationships
+                results = analyze_weight_relationships(exp.configs, weights, left_amp, right_amp)
+                all_results.append(results)
+                
+                # Print key results
+                # print(f"\nKey Results:")
+                # print(f"  Left readout weight: {results['readout_left'].shape}")
+                # print(f"  Right readout weight: {results['readout_right'].shape}")
+                # print(f"  Left pathway weight: {results['left_path'].shape}")
+                # print(f"  Cross pathway weight: {results['cross_path'].shape}")
+            # Save results
+            np.save('minimal_rnn_results.npy', all_results)
+            print("\nResults saved to 'minimal_rnn_results.npy'")
 
     # Create visualizations
     print("\nCreating visualizations...")
@@ -365,4 +408,4 @@ def main():
               f"Ratio: {r['input_ratio']:.2f}")
 
 if __name__ == "__main__":
-    main()
+    main("brute_force")

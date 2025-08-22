@@ -1159,7 +1159,7 @@ class DualALMRNNExp(object):
 
             dec_begin = self.delay_begin            
 
-            # INSERT_YOUR_CODE
+            # use a single readout model
             if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
                 # For single readout, zs is (n_trials, T, 1)
                 loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))

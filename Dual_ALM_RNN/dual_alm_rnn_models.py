@@ -730,34 +730,45 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
     def set_custom_weights(self, custom_weights_dict):
         """Set custom weights for specific connections"""
         with torch.no_grad():
+            # Get the model's default dtype to ensure consistency
+            model_dtype = next(self.parameters()).dtype
+            
             # Set recurrent weights
             if 'w_hh_linear_ll' in custom_weights_dict:
-                self.rnn_cell.w_hh_linear_ll.weight.data = custom_weights_dict['w_hh_linear_ll']
+                weight_tensor = custom_weights_dict['w_hh_linear_ll'].to(dtype=model_dtype)
+                self.rnn_cell.w_hh_linear_ll.weight.data = weight_tensor
             if 'w_hh_linear_rr' in custom_weights_dict:
-                self.rnn_cell.w_hh_linear_rr.weight.data = custom_weights_dict['w_hh_linear_rr']
+                weight_tensor = custom_weights_dict['w_hh_linear_rr'].to(dtype=model_dtype)
+                self.rnn_cell.w_hh_linear_rr.weight.data = weight_tensor
             if 'w_hh_linear_lr' in custom_weights_dict:
-                self.rnn_cell.w_hh_linear_lr.weight.data = custom_weights_dict['w_hh_linear_lr']
+                weight_tensor = custom_weights_dict['w_hh_linear_lr'].to(dtype=model_dtype)
+                self.rnn_cell.w_hh_linear_lr.weight.data = weight_tensor
             if 'w_hh_linear_rl' in custom_weights_dict:
-                self.rnn_cell.w_hh_linear_rl.weight.data = custom_weights_dict['w_hh_linear_rl']
+                weight_tensor = custom_weights_dict['w_hh_linear_rl'].to(dtype=model_dtype)
+                self.rnn_cell.w_hh_linear_rl.weight.data = weight_tensor
             
-            # Set input projection weights
+            # Set input projection weights (not used)
             if 'w_xh_linear_left_alm' in custom_weights_dict:
-                self.w_xh_linear_left_alm.weight.data = custom_weights_dict['w_xh_linear_left_alm']
+                weight_tensor = custom_weights_dict['w_xh_linear_left_alm'].to(dtype=model_dtype)
+                self.w_xh_linear_left_alm.weight.data = weight_tensor
             if 'w_xh_linear_right_alm' in custom_weights_dict:
-                self.w_xh_linear_right_alm.weight.data = custom_weights_dict['w_xh_linear_right_alm']
+                weight_tensor = custom_weights_dict['w_xh_linear_right_alm'].to(dtype=model_dtype)
+                self.w_xh_linear_right_alm.weight.data = weight_tensor
             
             # Set readout weights
             if 'readout_linear' in custom_weights_dict:
-                self.readout_linear.weight.data = custom_weights_dict['readout_linear']
+                weight_tensor = custom_weights_dict['readout_linear'].to(dtype=model_dtype)
+                self.readout_linear.weight.data = weight_tensor
             if 'readout_bias' in custom_weights_dict:
-                self.readout_linear.bias.data = custom_weights_dict['readout_bias']
+                weight_tensor = custom_weights_dict['readout_bias'].to(dtype=model_dtype)
+                self.readout_linear.bias.data = weight_tensor
     
     def forward_with_custom_weights(self, xs, custom_weights_dict):
         """Forward pass with custom weights (temporarily sets weights, then restores)"""
-        # Store original weights
-        original_weights = {}
-        for name, param in self.named_parameters():
-            original_weights[name] = param.data.clone()
+        # # Store original weights
+        # original_weights = {}
+        # for name, param in self.named_parameters():
+        #     original_weights[name] = param.data.clone()
         
         # Set custom weights
         self.set_custom_weights(custom_weights_dict)
@@ -766,10 +777,10 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         with torch.no_grad():
             hs, zs = self.forward(xs)
         
-        # Restore original weights
-        for name, param in self.named_parameters():
-            if name in original_weights:
-                param.data = original_weights[name]
+        # # Restore original weights 
+        # for name, param in self.named_parameters():
+        #     if name in original_weights:
+        #         param.data = original_weights[name]
         
         return hs, zs
 
