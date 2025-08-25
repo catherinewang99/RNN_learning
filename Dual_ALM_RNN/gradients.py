@@ -11,6 +11,8 @@ plt.rcParams['pdf.fonttype'] = '42'
 exp = DualALMRNNExp()
 
 
+## Load the weights based on the configs
+
 with open('dual_alm_rnn_configs.json','r') as read_file:
     configs = json.load(read_file)
 
