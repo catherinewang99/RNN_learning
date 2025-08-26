@@ -31,14 +31,14 @@ weight_files = [f for f in os.listdir(path) if f.startswith('weights_epoch_')]
 weight_files.sort()
 
 # Plot each of the r to r weight matrices (w_hh_linear_rr) as 10 subplots, each as a heatmap sharing the same colormap
-
-
 # If the weights are stored in 'weights_epoch_{}.npy' files, load w_hh_linear_rr from each
 rr_weights = []
 for f in weight_files:  # only first 10 epochs
     data = np.load(os.path.join(path, f))
     # If data is a dict with keys, extract 'w_hh_linear_rr'
-    rr_weights.append(data['w_hh_linear_rr'])
+    # rr_weights.append(data['w_hh_linear_rr'])
+    
+    rr_weights.append(data['w_hh_linear_ll'])
 
 # Determine global vmin/vmax for colormap
 all_min = min([w.min() for w in rr_weights])
@@ -66,6 +66,12 @@ fig.suptitle('figs/w_hh_linear_rr Weight Matrices Across Epochs', fontsize=18)
 plt.tight_layout(rect=[0, 0, 0.88, 1])
 fig.savefig('figs/w_hh_linear_rr_heatmaps.pdf', dpi=300, bbox_inches='tight')
 plt.show()
+
+
+
+
+
+
 
 
 # Plot heatmaps of the difference (delta) between w_hh_linear_rr weights at consecutive epochs
@@ -102,6 +108,10 @@ plt.tight_layout(rect=[0, 0, 0.88, 1])
 fig.savefig(f"figs/w_hh_linear_rr_delta_heatmaps_onehot_{configs['one_hot']}_train_{configs['train_type']}.pdf", dpi=300, bbox_inches='tight')
 
 plt.show()
+
+
+
+
 
 if False: # SVD stuff
 
@@ -158,7 +168,7 @@ if False: # SVD stuff
     plt.show()
 
 
-# Relationship between strength of sensory input and weight change across epochs
+# Relationship between strength of sensory input and weight / weight change across epochs
 sensory_input_weights_r = np.load(os.path.join(path, 'input_weights_right_epoch_final.npy')) # if one hot, then shape is (n_neurons, 2)
 
 
@@ -169,8 +179,6 @@ plt.ylabel('Summed Delta')
 plt.title('Relationship between strength of sensory input and weight change epoch 3→4')
 plt.show()
 
-
-
 output_weights_r = np.load(os.path.join(path, 'readout_weights_right_epoch_final.npy'))
 plt.scatter(output_weights_r, summed_deltas)
 plt.xlabel('Output Weight')
@@ -178,6 +186,19 @@ plt.ylabel('Summed Delta')
 plt.title('Relationship between strength of output weight and weight change epoch 3→4')
 plt.show()
 
+summed_weights = np.sum(rr_weights[2], axis=0)
+plt.scatter(np.mean(sensory_input_weights_r, axis=1), summed_deltas)
+plt.xlabel('Sensory Input Weight')
+plt.ylabel('Weights in epoch 3')
+plt.title('Relationship between strength of sensory input and weights in epoch 3')
+plt.show()
+
+output_weights_r = np.load(os.path.join(path, 'readout_weights_right_epoch_final.npy'))
+plt.scatter(output_weights_r, summed_weights)
+plt.xlabel('Output Weight')
+plt.ylabel('Weights in epoch 3')
+plt.title('Relationship between strength of output weight and weights in epoch 3')
+plt.show()
 
 
 

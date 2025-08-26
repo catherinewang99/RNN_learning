@@ -1036,7 +1036,7 @@ class DualALMRNNExp(object):
             print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
 
-        # After training
+        # After training (these weights don't change)
         left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy()
         right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy()
         # For left ALM readout (maps left ALM hidden units to output)
@@ -1792,7 +1792,8 @@ class DualALMRNNExp(object):
 
     def get_neurons_trace(self, model, device, loader, model_type, 
                         hemi_type='left_ALM', recompute=False, return_pred_labels=False,
-                        return_zs=False, hemi_agree=True, corrupt=False):
+                        return_zs=False, hemi_agree=True, corrupt=False,
+                        single_readout=False):
         '''
         Return:
         numpy arrays
@@ -1831,13 +1832,17 @@ class DualALMRNNExp(object):
                 '''
                 hs: (n_trials, T, n_neurons)
                 zs: (n_trials, T, 2)
+
+                zs: (n_trials, T, 1) if single_readout
                 '''
 
                 hs, zs = model(inputs)
 
 
                 n_neurons = hs.shape[2]
-                
+
+                if single_readout:
+                    pass
                 if hemi_type == 'left_ALM':
                     hs = hs[...,:n_neurons//2]
                 elif hemi_type == 'right_ALM':
@@ -1850,30 +1855,33 @@ class DualALMRNNExp(object):
                 total_labels.append(labels.cpu().data.numpy())
 
                 if return_pred_labels:
-
-                    preds_left_alm = (zs[:,-1,0] >= 0).long().cpu().data.numpy()
-                    preds_right_alm = (zs[:,-1,1] >= 0).long().cpu().data.numpy()
-
-                    # We take only trials for which both hemispheres agree in pred_labels. The other trials have value of -1.
-                    if hemi_agree and hemi_type == 'all':
-                        agree_mask = (preds_left_alm == preds_right_alm)
-                        pred_labels = np.zeros_like(preds_left_alm)
-                        pred_labels[agree_mask] = preds_left_alm[agree_mask]
-                        pred_labels[~agree_mask] = -1
-
-                        total_pred_labels.append(pred_labels)
+                    if single_readout:
+                        preds_all = (zs[:,-1,0] >= 0).long().cpu().data.numpy()
+                        total_pred_labels.append(preds_all)
                     else:
-                        total_preds_left_alm.append(preds_left_alm)
-                        total_preds_right_alm.append(preds_right_alm)
+                        preds_left_alm = (zs[:,-1,0] >= 0).long().cpu().data.numpy()
+                        preds_right_alm = (zs[:,-1,1] >= 0).long().cpu().data.numpy()
+
+                        # We take only trials for which both hemispheres agree in pred_labels. The other trials have value of -1.
+                        if hemi_agree and hemi_type == 'all':
+                            agree_mask = (preds_left_alm == preds_right_alm)
+                            pred_labels = np.zeros_like(preds_left_alm)
+                            pred_labels[agree_mask] = preds_left_alm[agree_mask]
+                            pred_labels[~agree_mask] = -1
+
+                            total_pred_labels.append(pred_labels)
+                        else:
+                            total_preds_left_alm.append(preds_left_alm)
+                            total_preds_right_alm.append(preds_right_alm)
 
         total_hs = cat(total_hs, 0)
         total_labels = cat(total_labels, 0)
 
-        if return_pred_labels and hemi_type == 'all':
+        if return_pred_labels and (hemi_type == 'all' or single_readout):
             total_pred_labels = cat(total_pred_labels, 0)
 
         if return_pred_labels:
-            if hemi_type == 'all':
+            if hemi_type == 'all' or single_readout:
                 return total_hs, total_labels, total_pred_labels
             else:
                 return total_hs, total_labels, cat(total_preds_left_alm, 0), cat(total_preds_right_alm, 0) 
@@ -1885,11 +1893,9 @@ class DualALMRNNExp(object):
 
 
 
+        
 
-
-
-
-    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None):
+    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False):
         """
         Evaluate model accuracy under:
         - Control (no perturbation)
@@ -1904,6 +1910,7 @@ class DualALMRNNExp(object):
             model_type: model type string
             n_control: optional cap on number of control trials to subsample (for speed)
             seed: optional RNG seed for reproducibility of any shuffling
+            control_only: if True, only evaluate control condition
         
         Returns:
             dict with accuracy scores for each condition
@@ -1961,17 +1968,18 @@ class DualALMRNNExp(object):
         model.left_alm_pert_prob = 0.5
         results['control'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=n_control)
 
-        # 2. Left ALM photoinhibition
-        print("Evaluating left ALM photoinhibition...")
-        model.uni_pert_trials_prob = 1.0
-        model.left_alm_pert_prob = 1.0
-        results['left_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
+        if not control_only:
+            # 2. Left ALM photoinhibition
+            print("Evaluating left ALM photoinhibition...")
+            model.uni_pert_trials_prob = 1.0
+            model.left_alm_pert_prob = 1.0
+            results['left_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
 
-        # 3. Right ALM photoinhibition
-        print("Evaluating right ALM photoinhibition...")
-        model.uni_pert_trials_prob = 1.0
-        model.left_alm_pert_prob = 0.0
-        results['right_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
+            # 3. Right ALM photoinhibition
+            print("Evaluating right ALM photoinhibition...")
+            model.uni_pert_trials_prob = 1.0
+            model.left_alm_pert_prob = 0.0
+            results['right_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
 
         # 4. Bilateral photoinhibition (both left and right ALM)
         # print("Evaluating bilateral photoinhibition...")
@@ -1996,18 +2004,31 @@ class DualALMRNNExp(object):
         model.uni_pert_trials_prob = 0
         model.left_alm_pert_prob = 0.5
 
-        # Print summary
-        print("\n" + "="*50)
-        print("PERTURBATION EVALUATION RESULTS (per hemisphere)")
-        print("="*50)
-        for condition, metrics in results.items():
-            print(f"{condition.replace('_', ' ').title()}:")
-            print(f"  Readout Accuracy Left: {metrics['readout_accuracy_left']:.3f}")
-            print(f"  Readout Accuracy Right: {metrics['readout_accuracy_right']:.3f}")
-            print(f"  CD Accuracy Left: {metrics['cd_accuracy_left']:.3f}")
-            print(f"  CD Accuracy Right: {metrics['cd_accuracy_right']:.3f}")
-            print(f"  N Trials: {metrics['n_trials']}")
-            print()
+        if not control_only:
+            # Print summary
+            print("\n" + "="*50)
+            print("PERTURBATION EVALUATION RESULTS (per hemisphere)")
+            print("="*50)
+            for condition, metrics in results.items():
+                print(f"{condition.replace('_', ' ').title()}:")
+                print(f"  Readout Accuracy Left: {metrics['readout_accuracy_left']:.3f}")
+                print(f"  Readout Accuracy Right: {metrics['readout_accuracy_right']:.3f}")
+                print(f"  CD Accuracy Left: {metrics['cd_accuracy_left']:.3f}")
+                print(f"  CD Accuracy Right: {metrics['cd_accuracy_right']:.3f}")
+                print(f"  N Trials: {metrics['n_trials']}")
+                print()
+        else:
+            print("\n" + "="*50)
+            print("CONTROL RESULTS (per hemisphere)")
+            print("="*50)
+            for condition, metrics in results.items():
+                print(f"{condition.replace('_', ' ').title()}:")
+                print(f"  Readout Accuracy Left: {metrics['readout_accuracy_left']:.3f}")
+                print(f"  Readout Accuracy Right: {metrics['readout_accuracy_right']:.3f}")
+                print(f"  CD Accuracy Left: {metrics['cd_accuracy_left']:.3f}")
+                print(f"  CD Accuracy Right: {metrics['cd_accuracy_right']:.3f}")
+                print(f"  N Trials: {metrics['n_trials']}")
+                print()
         return results
 
     def _calculate_cd_accuracy(self, hs, labels, cds, cd_dbs):

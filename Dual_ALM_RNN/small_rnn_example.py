@@ -19,6 +19,13 @@ import dual_alm_rnn_models
 import itertools
 import time
 
+def to_float(x):
+    # if it’s a tensor, pull it off-device and to a Python float
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().item()
+    # else assume it’s already a float or numpy scalar
+    return float(x)
+
 # Input asymmetry combinations to test
 input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.5), (1.0,1.0), 
               (0.5,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)]  # Same as BK
@@ -39,10 +46,11 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     # Initialize model
     model_type = configs['model_type']
     model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
-    
+    model_save_path = os.path.join(exp.configs['models_dir'], f'small_rnn_{configs["random_seed"]}')
     # Set device
-    device = torch.device("cpu")  # Use CPU to avoid MPS issues
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
     model = model.to(device)
+    params = {'batch_size': configs['bs'], 'shuffle': True}
     
     # Load data
     train_save_path = os.path.join(exp.configs['data_dir'], 'train')
@@ -55,10 +63,10 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     
     # Create data loaders
     train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
-    train_loader = data.DataLoader(train_set, batch_size=configs['bs'], shuffle=True, drop_last=True)
+    train_loader = data.DataLoader(train_set, **params, drop_last=True)
     
     val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
-    val_loader = data.DataLoader(val_set, batch_size=configs['bs'], shuffle=False)
+    val_loader = data.DataLoader(val_set, **params)
     
     # Explicitly include readout weights
     trainable_params = []
@@ -77,35 +85,54 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     all_epoch_val_losses = []
     all_epoch_val_scores = []
     
+    # Separate lists for every epoch val results
+    all_val_results_dict = []
+
+    best_val_score = float('-inf')
+
     for epoch in range(configs['n_epochs']):
         print(f'\nEpoch {epoch+1}/{configs["n_epochs"]}')
-        
+
+        epoch_begin_time = time.time()
         # Use prebuilt train_helper function
         train_losses, train_scores = exp.train_helper(model, device, train_loader, optimizer, epoch, loss_fct)
         
+        total_hs, total_labels, total_pred_labels = exp.get_neurons_trace(model, device, val_loader, model_type, single_readout=True, return_pred_labels=True)
+        accuracy = np.mean(total_labels == total_pred_labels)
+        print(f'Accuracy: {accuracy}')
+        
         # Use prebuilt val_helper function
         val_loss, val_score = exp.val_helper(model, device, val_loader, loss_fct)
-        
-        # Convert tensors to numpy safely - detach gradients first
-        if isinstance(train_losses[0], torch.Tensor):
-            train_losses_np = [loss.detach().cpu().numpy() if loss.requires_grad else loss.cpu().numpy() for loss in train_losses]
-        else:
-            train_losses_np = train_losses
-            
-        if isinstance(train_scores[0], torch.Tensor):
-            train_scores_np = [score.detach().cpu().numpy() if score.requires_grad else score.cpu().numpy() for score in train_scores]
-        else:
-            train_scores_np = train_scores
-        
+
+
+        if val_score > best_val_score:
+            best_val_score = val_score
+            model_save_name = 'best_model.pth'
+
+            torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))  # save model
+
         # Record metrics
-        all_epoch_train_losses.extend(train_losses_np)
-        all_epoch_train_scores.extend(train_scores_np)
+        all_epoch_train_losses.extend(train_losses)
+        all_epoch_train_scores.extend(train_scores)
         all_epoch_val_losses.append(val_loss)
         all_epoch_val_scores.append(val_score)
-        
-        print(f'Epoch {epoch+1} Summary: Train Loss: {np.mean(train_losses_np):.4f}, '
-              f'Train Acc: {np.mean(train_scores_np)*100:.1f}%, '
-              f'Val Loss: {val_loss:.4f}, Val Acc: {val_score*100:.1f}%')
+
+        A = np.array([to_float(t) for t in all_epoch_train_losses])
+        B = np.array([to_float(t) for t in all_epoch_train_scores])
+        C = np.array([to_float(t) for t in all_epoch_val_losses])
+        D = np.array([to_float(t) for t in all_epoch_val_scores])
+
+        np.save(os.path.join(model_save_path, 'all_epoch_train_losses.npy'), A)
+        np.save(os.path.join(model_save_path, 'all_epoch_train_scores.npy'), B)
+        np.save(os.path.join(model_save_path, 'all_epoch_val_losses.npy'), C)
+        np.save(os.path.join(model_save_path, 'all_epoch_val_scores.npy'), D)
+
+        epoch_end_time = time.time()
+
+        print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
+        print(f'Best val score: {best_val_score}')
+        print('')
+
     
     # Extract final weights
     final_weights = {}
@@ -355,9 +382,9 @@ def main(training_method):
             print("\nResults saved to 'minimal_rnn_results_brute_force.npy'")
     else:
         # Load results if they exist
-        if os.path.exists('minimal_rnn_results.npy'):
-            all_results = np.load('minimal_rnn_results.npy', allow_pickle=True).tolist()
-            print("\nResults loaded from 'minimal_rnn_results.npy'")
+        if os.path.exists(f'small_rnn_random_seed_{exp.configs["random_seed"]}/minimal_rnn_results.npy'):
+            all_results = np.load(f'small_rnn_random_seed_{exp.configs["random_seed"]}/minimal_rnn_results.npy', allow_pickle=True).tolist()
+            print(f"\nResults loaded from 'small_rnn_random_seed_{exp.configs['random_seed']}/minimal_rnn_results.npy'")
 
 
         else:
@@ -384,7 +411,7 @@ def main(training_method):
                 # print(f"  Left pathway weight: {results['left_path'].shape}")
                 # print(f"  Cross pathway weight: {results['cross_path'].shape}")
             # Save results
-            np.save('minimal_rnn_results.npy', all_results)
+            np.save('small_rnn/minimal_rnn_results.npy', all_results)
             print("\nResults saved to 'minimal_rnn_results.npy'")
 
     # Create visualizations
@@ -408,4 +435,4 @@ def main(training_method):
               f"Ratio: {r['input_ratio']:.2f}")
 
 if __name__ == "__main__":
-    main("brute_force")
+    main("gradient")
