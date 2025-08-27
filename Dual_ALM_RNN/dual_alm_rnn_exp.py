@@ -1150,7 +1150,7 @@ class DualALMRNNExp(object):
 
             '''
             hs: (n_trials, T, n_neurons)
-            zs: (n_trials, T, 2) # 2 because we have a readout at each hemisphere.
+            zs: (n_trials, T, 2) # 2 because we have a readout at each hemisphere, unless single readout
             '''
             _, zs = model(inputs)
 

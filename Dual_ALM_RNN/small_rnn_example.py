@@ -30,7 +30,249 @@ def to_float(x):
 input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.5), (1.0,1.0), 
               (0.5,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)]  # Same as BK
 
-def train_minimal_rnn(configs, left_amp, right_amp, exp):
+def generate_simple_dataset(exp):
+    """
+    Generate a simple dataset with few trials of few time steps each.
+    """
+    random_seed = exp.configs['dataset_random_seed']
+
+    np.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    T = exp.T
+    sample_begin = exp.sample_begin
+    delay_begin = exp.delay_begin
+
+    presample_mask = np.zeros((T,), dtype=bool)
+    presample_mask[:sample_begin] = True
+    presample_inds = np.arange(0,sample_begin)
+
+    sample_mask = np.zeros((T,), dtype=bool)
+    sample_mask[sample_begin:delay_begin] = True
+    sample_inds = np.arange(sample_begin,delay_begin)
+
+
+    delay_mask = np.zeros((T,), dtype=bool)
+    delay_mask[delay_begin:] = True
+    delay_inds = np.arange(delay_begin,T)
+
+
+    n_train_trials = 10
+    n_val_trials = 5
+    n_test_trials = 5
+
+    sensory_input_means = 0.5
+    sensory_input_stds = 0.05
+
+    '''
+    Generate the train, val and test set.
+    '''
+
+    # Change input dimension from 1 to 2 (one-hot encoding)
+    train_sensory_inputs = np.zeros((n_train_trials, T, 2), dtype=np.float32)
+    val_sensory_inputs = np.zeros((n_val_trials, T, 2), dtype=np.float32) 
+    test_sensory_inputs = np.zeros((n_test_trials, T, 2), dtype=np.float32)
+
+    train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
+    val_trial_type_labels = np.zeros((n_val_trials,), dtype=int)
+    test_trial_type_labels = np.zeros((n_test_trials,), dtype=int)
+
+    # Labels of trial type (random)
+    shuffled_inds = np.random.permutation(n_train_trials)
+    train_trial_type_labels[shuffled_inds[:n_train_trials//2]] = 1
+    shuffled_inds = np.random.permutation(n_val_trials)
+    val_trial_type_labels[shuffled_inds[:n_val_trials//2]] = 1
+    shuffled_inds = np.random.permutation(n_test_trials)
+    test_trial_type_labels[shuffled_inds[:n_test_trials//2]] = 1
+    
+    # For each trial type, set the appropriate one-hot channel
+    for i in range(exp.n_trial_types):
+
+        # Train labels first
+        cur_trial_type_inds = np.nonzero(train_trial_type_labels==i)[0]
+        gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1) # Positive and negative values of shape (n_trials, T, 1)
+        # Left trials (i=0): [1, 0], Right trials (i=1): [0, 1]
+        train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \ 
+        sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
+
+        # Val labels
+        cur_trial_type_inds = np.nonzero(val_trial_type_labels==i)[0]
+        gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+        val_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+        sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
+
+        # Test labels
+        cur_trial_type_inds = np.nonzero(test_trial_type_labels==i)[0]
+        gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+        test_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+        sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
+
+
+    '''
+    Save.
+    '''
+    train_save_path = os.path.join(exp.configs['data_dir'], 'train')
+    os.makedirs(train_save_path, exist_ok=True)
+    np.save(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy'), train_sensory_inputs)
+    np.save(os.path.join(train_save_path, 'onehot_trial_type_labels_simple.npy'), train_trial_type_labels)
+
+    val_save_path = os.path.join(exp.configs['data_dir'], 'val')
+    os.makedirs(val_save_path, exist_ok=True)
+    np.save(os.path.join(val_save_path, 'onehot_sensory_inputs_simple.npy'), val_sensory_inputs)
+    np.save(os.path.join(val_save_path, 'onehot_trial_type_labels_simple.npy'), val_trial_type_labels)
+
+    test_save_path = os.path.join(exp.configs['data_dir'], 'test')
+    os.makedirs(test_save_path, exist_ok=True)
+    np.save(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy'), test_sensory_inputs)
+    np.save(os.path.join(test_save_path, 'onehot_trial_type_labels_simple.npy'), test_trial_type_labels)
+
+
+    sample_inds = np.random.permutation(n_train_trials)[:10]
+    sample_train_inputs = train_sensory_inputs[sample_inds]
+    sample_train_labels = train_trial_type_labels[sample_inds]
+
+def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
+    """Train a minimal RNN with specific input amplitudes using prebuilt functions"""
+    print(f"\nTraining RNN with left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
+    
+    # Modify configs for minimal RNN
+    configs['n_neurons'] = 2  # Only 2 units total
+    configs['n_epochs'] = 10  # Train for 10 epochs
+    configs['one_hot'] = 1    # Use one-hot encoding
+    
+    # Update configs for this specific training run
+    configs['xs_left_alm_amp'] = left_amp
+    configs['xs_right_alm_amp'] = right_amp
+
+    configs['lr'] = 1e-2
+    
+    # Initialize model
+    model_type = configs['model_type']
+    model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
+    model_save_path = os.path.join(exp.configs['models_dir'], f'small_rnn_{configs["random_seed"]}')
+    os.makedirs(model_save_path, exist_ok=True)
+    # Set device
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
+    model = model.to(device)
+    params = {'batch_size': configs['bs'], 'shuffle': True}
+    
+    # Load data
+    train_save_path = os.path.join(exp.configs['data_dir'], 'train')
+    train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy'))
+    train_trial_type_labels = np.load(os.path.join(train_save_path, 'onehot_trial_type_labels_simple.npy'))
+    
+    val_save_path = os.path.join(exp.configs['data_dir'], 'val')
+    val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_simple.npy'))
+    val_trial_type_labels = np.load(os.path.join(val_save_path, 'onehot_trial_type_labels_simple.npy'))
+    
+    # Create data loaders
+    train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
+    train_loader = data.DataLoader(train_set, **params, drop_last=True)
+    
+    val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
+    val_loader = data.DataLoader(val_set, **params)
+    
+    # Explicitly include readout weights
+    trainable_params = []
+    for name, param in model.named_parameters():
+        if 'rnn_cell' in name or 'readout_linear' in name:
+            trainable_params.append(param)
+
+    # Initialize optimizer and loss
+    optimizer = optim.Adam(trainable_params, lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
+    # optimizer = optim.Adam(model.parameters(), lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
+    loss_fct = nn.BCEWithLogitsLoss()
+    
+    # Training loop using prebuilt functions
+    all_epoch_train_losses = []
+    all_epoch_train_scores = []
+    all_epoch_val_losses = []
+    all_epoch_val_scores = []
+    
+    # Separate lists for every epoch val results
+    all_val_results_dict = []
+
+    best_val_score = float('-inf')
+
+    for epoch in range(configs['n_epochs']):
+        print(f'\nEpoch {epoch+1}/{configs["n_epochs"]}')
+
+        epoch_begin_time = time.time()
+        # Use prebuilt train_helper function
+        train_losses, train_scores = exp.train_helper(model, device, train_loader, optimizer, epoch, loss_fct)
+        
+        total_hs, total_labels, total_pred_labels = exp.get_neurons_trace(model, device, val_loader, model_type, single_readout=True, return_pred_labels=True)
+        accuracy = np.mean(total_labels == total_pred_labels)
+        print(f'Accuracy: {accuracy}')
+
+        # Use prebuilt val_helper function
+        val_loss, val_score = exp.val_helper(model, device, val_loader, loss_fct)
+
+
+        if val_score > best_val_score:
+            print(f'New best val score: {val_score} in epoch {epoch+1}')
+            best_val_score = val_score
+            model_save_name = 'best_model.pth'
+
+            torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))  # save model
+
+        # Record metrics
+        all_epoch_train_losses.extend(train_losses)
+        all_epoch_train_scores.extend(train_scores)
+        all_epoch_val_losses.append(val_loss)
+        all_epoch_val_scores.append(val_score)
+
+        A = np.array([to_float(t) for t in all_epoch_train_losses])
+        B = np.array([to_float(t) for t in all_epoch_train_scores])
+        C = np.array([to_float(t) for t in all_epoch_val_losses])
+        D = np.array([to_float(t) for t in all_epoch_val_scores])
+
+        np.save(os.path.join(model_save_path, 'all_epoch_train_losses.npy'), A)
+        np.save(os.path.join(model_save_path, 'all_epoch_train_scores.npy'), B)
+        np.save(os.path.join(model_save_path, 'all_epoch_val_losses.npy'), C)
+        np.save(os.path.join(model_save_path, 'all_epoch_val_scores.npy'), D)
+
+        epoch_end_time = time.time()
+
+        print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
+        print(f'Best val score: {best_val_score}')
+        print('')
+
+    
+    # Extract final weights
+    # final_weights = {}
+    # for name, param in model.named_parameters():
+    #     final_weights[name] = param.data.cpu().numpy().copy()
+    
+    # Load the best model weights from disk
+    best_model_path = os.path.join(model_save_path, 'best_model.pth')
+
+    if os.path.exists(best_model_path):
+        print(f"Loading best model weights from: {best_model_path}")
+        
+        # Load the best model state dict
+        best_state_dict = torch.load(best_model_path, map_location='cpu')
+        
+        # Extract weights from the best model
+        final_weights = {}
+        for name, weight_tensor in best_state_dict.items():
+            final_weights[name] = weight_tensor.cpu().numpy().copy()
+        
+        print("Loaded best model weights successfully!")
+    else:
+        print(f"Warning: Best model not found at {best_model_path}")
+        print("Falling back to final model weights...")
+        
+        # Fallback to current model weights
+        final_weights = {}
+        for name, param in model.named_parameters():
+            final_weights[name] = param.data.cpu().numpy().copy()
+
+    return final_weights, all_epoch_train_losses, all_epoch_val_losses, all_epoch_train_scores, all_epoch_val_scores
+
+
+
+def train_minimal_rnn(configs, left_amp, right_amp, exp, simple_data):
     """Train a minimal RNN with specific input amplitudes using prebuilt functions"""
     print(f"\nTraining RNN with left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
     
@@ -47,6 +289,7 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     model_type = configs['model_type']
     model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
     model_save_path = os.path.join(exp.configs['models_dir'], f'small_rnn_{configs["random_seed"]}')
+    os.makedirs(model_save_path, exist_ok=True)
     # Set device
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
     model = model.to(device)
@@ -56,7 +299,7 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
     train_save_path = os.path.join(exp.configs['data_dir'], 'train')
     train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs.npy'))
     train_trial_type_labels = np.load(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'))
-    
+
     val_save_path = os.path.join(exp.configs['data_dir'], 'val')
     val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs.npy'))
     val_trial_type_labels = np.load(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'))
@@ -100,7 +343,7 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
         total_hs, total_labels, total_pred_labels = exp.get_neurons_trace(model, device, val_loader, model_type, single_readout=True, return_pred_labels=True)
         accuracy = np.mean(total_labels == total_pred_labels)
         print(f'Accuracy: {accuracy}')
-        
+
         # Use prebuilt val_helper function
         val_loss, val_score = exp.val_helper(model, device, val_loader, loss_fct)
 
@@ -135,10 +378,34 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp):
 
     
     # Extract final weights
-    final_weights = {}
-    for name, param in model.named_parameters():
-        final_weights[name] = param.data.cpu().numpy().copy()
+    # final_weights = {}
+    # for name, param in model.named_parameters():
+    #     final_weights[name] = param.data.cpu().numpy().copy()
     
+    # Load the best model weights from disk
+    best_model_path = os.path.join(model_save_path, 'best_model.pth')
+
+    if os.path.exists(best_model_path):
+        print(f"Loading best model weights from: {best_model_path}")
+        
+        # Load the best model state dict
+        best_state_dict = torch.load(best_model_path, map_location='cpu')
+        
+        # Extract weights from the best model
+        final_weights = {}
+        for name, weight_tensor in best_state_dict.items():
+            final_weights[name] = weight_tensor.cpu().numpy().copy()
+        
+        print("Loaded best model weights successfully!")
+    else:
+        print(f"Warning: Best model not found at {best_model_path}")
+        print("Falling back to final model weights...")
+        
+        # Fallback to current model weights
+        final_weights = {}
+        for name, param in model.named_parameters():
+            final_weights[name] = param.data.cpu().numpy().copy()
+
     return final_weights, all_epoch_train_losses, all_epoch_val_losses, all_epoch_train_scores, all_epoch_val_scores
 
 
@@ -358,13 +625,33 @@ def main(training_method):
     # Initialize experiment
     exp = DualALMRNNExp()
     
-    # Generate dataset if it doesn't exist
-    if not os.path.exists(os.path.join(exp.configs['data_dir'], 'train', 'onehot_sensory_inputs.npy')):
-        print("Generating one-hot dataset...")
-        exp.generate_dataset_onehot()
+    os.makedirs(f'small_rnn_random_seed_{exp.configs["random_seed"]}', exist_ok=True)
+
+    # Generate dataset simple
+    # if not os.path.exists(os.path.join(exp.configs['data_dir'], 'train', 'onehot_sensory_inputs_simple.npy')):
+    #     print("Generating simple one-hot dataset...")
+    generate_simple_dataset(exp)
     
     # Train RNN for each input asymmetry
-    if training_method == "brute_force":
+    if training_method == "simple_data":
+
+        # Train the RNN using prebuilt functions
+        weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn_simple_data(
+            exp.configs.copy(), 1.0, 1.0, exp
+        )
+
+        # for left_amp, right_amp in input_asym:
+        #     print(f"\n{'='*60}")
+        #     print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
+        #     print(f"{'='*60}")
+            
+            # # Train the RNN using prebuilt functions
+            # weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn_simple_data(
+            #     exp.configs.copy(), left_amp, right_amp, exp
+            # )
+
+
+    elif training_method == "brute_force":
         if os.path.exists('minimal_rnn_results_brute_force.npy'):
             all_results = np.load('minimal_rnn_results_brute_force.npy', allow_pickle=True).tolist()
             print("\nResults loaded from 'minimal_rnn_results_brute_force.npy'")
@@ -411,7 +698,7 @@ def main(training_method):
                 # print(f"  Left pathway weight: {results['left_path'].shape}")
                 # print(f"  Cross pathway weight: {results['cross_path'].shape}")
             # Save results
-            np.save('small_rnn/minimal_rnn_results.npy', all_results)
+            np.save('small_rnn_random_seed_{exp.configs["random_seed"]}/minimal_rnn_results.npy', all_results)
             print("\nResults saved to 'minimal_rnn_results.npy'")
 
     # Create visualizations
@@ -424,15 +711,15 @@ def main(training_method):
 
     
     # Print summary statistics
-    print("\n" + "="*60)
-    print("SUMMARY STATISTICS")
-    print("="*60)
+    # print("\n" + "="*60)
+    # print("SUMMARY STATISTICS")
+    # print("="*60)
     
-    for i, (left_amp, right_amp) in enumerate(input_asym):
-        r = all_results[i]
-        print(f"Left: {left_amp:.1f}, Right: {right_amp:.1f} | "
-              f"Left Readout: {r['readout_left']:.4f}, Right Readout: {r['readout_right']:.4f} | "
-              f"Ratio: {r['input_ratio']:.2f}")
+    # for i, (left_amp, right_amp) in enumerate(input_asym):
+    #     r = all_results[i]
+    #     print(f"Left: {left_amp:.1f}, Right: {right_amp:.1f} | "
+    #           f"Left Readout: {r['readout_left']:.4f}, Right Readout: {r['readout_right']:.4f} | "
+    #           f"Ratio: {r['input_ratio']:.2f}")
 
 if __name__ == "__main__":
-    main("gradient")
+    main("simple_data")
