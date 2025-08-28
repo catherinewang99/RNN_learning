@@ -23,6 +23,9 @@ def parse_args():
 
     parser.add_argument('--plot_weights_changes', action='store_true', default=False)
 
+    parser.add_argument('--train_type_single_readout', action='store_true', default=False)
+
+    parser.add_argument('--plot_single_readout', action='store_true', default=False)
 
     return parser.parse_args()
 
@@ -46,6 +49,14 @@ def main():
     if args.train_type_modular:
         exp = DualALMRNNExp()
         exp.train_type_modular()
+
+    if args.train_type_single_readout:
+        exp = DualALMRNNExp()
+        exp.train_type_modular_single_readout()
+
+    if args.plot_single_readout:
+        exp = DualALMRNNExp()
+        exp.plot_single_readout()
         
     if args.train_type_modular_corruption:
         exp = DualALMRNNExp()

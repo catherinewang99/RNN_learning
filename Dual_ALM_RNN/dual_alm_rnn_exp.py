@@ -1094,6 +1094,226 @@ class DualALMRNNExp(object):
             print('')
 
 
+    def train_type_modular_single_readout(self):
+
+        random_seed = self.configs['random_seed']
+
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+
+
+        model_type = self.configs['model_type']
+
+
+        self.init_sub_path('train_type_modular')
+
+
+        model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
+
+
+        logs_save_path = os.path.join(self.configs['logs_dir'], self.configs['model_type'], self.sub_path)
+        self.logs_save_path = logs_save_path
+
+        os.makedirs(model_save_path, exist_ok=True)
+        os.makedirs(logs_save_path, exist_ok=True)
+
+
+
+
+        # Detect devices
+        use_cuda = bool(self.configs['use_cuda'])
+        if use_cuda and not torch.cuda.is_available():
+            use_cuda = False
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
+
+        # device = torch.device("cuda:{}".format(self.configs['gpu_ids'][0]) if use_cuda else "cpu")
+
+        # Data loading parameters
+        if use_cuda:
+            params = {'batch_size': self.configs['bs'], 'shuffle': True, 'num_workers': self.configs['num_workers'], \
+            'pin_memory': bool(self.configs['pin_memory'])}
+        else:
+            params = {'batch_size': self.configs['bs'], 'shuffle': True}
+
+        '''
+        Load the dataset and wrap it with Pytorch Dataset.
+        '''
+
+        # train
+        train_save_path = os.path.join(self.configs['data_dir'], 'train')
+
+        train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+
+        train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
+
+        train_loader = data.DataLoader(train_set, **params, drop_last=False)
+
+        # val
+        val_save_path = os.path.join(self.configs['data_dir'], 'val')
+
+        val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+
+        val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
+
+        val_loader = data.DataLoader(val_set, **params)
+
+        # load test data for later
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+        
+        test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
+        test_loader = torch.utils.data.DataLoader(test_set, **params)
+
+        '''
+        Initialize the model.
+        '''
+
+        import sys
+        model = getattr(sys.modules[__name__], model_type)(self.configs, \
+            self.a, self.pert_begin, self.pert_end).to(device)
+
+
+
+        '''
+        We only train the recurrent weights.
+        '''
+        params_within_hemi = []
+        params_cross_hemi = []
+        n_neurons = self.configs['n_neurons']
+
+
+        for name, param in model.named_parameters():
+            if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
+                params_within_hemi.append(param)
+            elif ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
+                params_cross_hemi.append(param)
+
+
+        optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+
+
+        loss_fct = nn.BCEWithLogitsLoss()
+
+
+
+
+        '''
+        Train the model.
+        '''
+
+
+
+        all_epoch_train_losses = []
+        all_epoch_train_scores = []
+        all_epoch_val_losses = []
+        all_epoch_val_scores = []
+
+        # Separate lists for across-hemi training
+        all_across_train_losses = []
+        all_across_train_scores = []
+        all_across_val_losses = []
+        all_across_val_scores = []
+
+        # Separate lists for every epoch val results
+        all_val_results_dict = []
+
+        best_val_score = float('-inf')
+
+        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy()
+        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy()
+        # For left ALM readout (maps left ALM hidden units to output)
+        readout_weights = model.readout_linear.weight.data.cpu().numpy()  # shape: (n_left_neurons,)
+
+
+        # Save to file, append to a list, or log as needed
+        np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_initial.npy"), left_input_weights)
+        np.save(os.path.join(logs_save_path, f"input_weights_right_epoch_initial.npy"), right_input_weights)
+        np.save(os.path.join(logs_save_path, f"readout_weights_epoch_initial.npy"), readout_weights)
+
+        for epoch in range(self.configs['n_epochs']):
+            epoch_begin_time = time.time()
+
+
+            print('')
+            print('Within-hemi training')
+
+            model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+
+            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
+            total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
+            np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
+              # After optimizer.step() and epoch ends
+            # val_results = self.eval_with_perturbations(
+            #     model=model,
+            #     device=device,
+            #     loader=test_loader,  # or val_loader
+            #     model_type=model_type,
+            #     n_control=500,
+            #     seed=42
+            # )
+            # all_val_results_dict.append(val_results)
+
+            val_loss, val_score = self.val_helper(model, device, val_loader, loss_fct) # On the entire val set.
+
+            if val_score > best_val_score:
+                best_val_score = val_score
+                model_save_name = 'best_model.pth'
+
+                torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))  # save model
+
+
+            all_epoch_train_losses.extend(train_losses)
+            all_epoch_train_scores.extend(train_scores)
+            all_epoch_val_losses.append(val_loss)
+            all_epoch_val_scores.append(val_score)
+
+            # A = np.array(all_epoch_train_losses)
+            # B = np.array(all_epoch_train_scores)
+            # C = np.array(all_epoch_val_losses)
+            # D = np.array(all_epoch_val_scores)
+
+            # after: pull everything back to CPU and to Python floats
+
+
+
+
+            # Track weights after each epoch
+            self.track_weights(model, epoch, 'within_hemi', logs_save_path)
+
+            epoch_end_time = time.time()
+
+            print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
+            print('')
+
+        A = np.array([to_float(t) for t in all_epoch_train_losses])
+        B = np.array([to_float(t) for t in all_epoch_train_scores])
+        C = np.array([to_float(t) for t in all_epoch_val_losses])
+        D = np.array([to_float(t) for t in all_epoch_val_scores])
+
+        np.save(os.path.join(logs_save_path, 'all_epoch_train_losses.npy'), A)
+        np.save(os.path.join(logs_save_path, 'all_epoch_train_scores.npy'), B)
+        np.save(os.path.join(logs_save_path, 'all_epoch_val_losses.npy'), C)
+        np.save(os.path.join(logs_save_path, 'all_epoch_val_scores.npy'), D)
+        # After training
+        left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy()
+        right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy()
+        # For left ALM readout (maps left ALM hidden units to output)
+        readout_weights = model.readout_linear.weight.data.cpu().numpy()  # shape: (n_left_neurons,)
+
+
+        # Save to file, append to a list, or log as needed
+        np.save(os.path.join(logs_save_path, f"input_weights_left_epoch_final.npy"), left_input_weights)
+        np.save(os.path.join(logs_save_path, f"input_weights_right_epoch_final.npy"), right_input_weights)
+        np.save(os.path.join(logs_save_path, f"readout_weights_epoch_final.npy"), readout_weights)
+
+        np.save(os.path.join(logs_save_path, 'all_val_results_dict.npy'), all_val_results_dict)
+
+
+
 
 
     def track_weights(self, model, epoch, training_phase, logs_save_path):
@@ -1111,11 +1331,11 @@ class DualALMRNNExp(object):
         # Extract weight matrices
         for name, param in model.named_parameters():
             # Only save weights, not biases, and strip prefix/suffix
-            if 'w_hh_linear' in name and name.endswith('.weight'):
-                # name might be 'rnn_cell.w_hh_linear_ll.weight'
-                key = name.split('.')[-2]  # gets 'w_hh_linear_ll'
-                weight_matrix = param.data.cpu().numpy()
-                weight_data[key] = weight_matrix
+            # if 'w_hh_linear' in name and name.endswith('.weight'):
+            # name might be 'rnn_cell.w_hh_linear_ll.weight'
+            # key = name.split('.')[-2]  # gets 'w_hh_linear_ll'
+            weight_matrix = param.data.cpu().numpy()
+            weight_data[name] = weight_matrix
         
         # Save to file
         save_path = os.path.join(logs_save_path, f'weights_epoch_{epoch}_{training_phase}.npz')
@@ -1138,6 +1358,8 @@ class DualALMRNNExp(object):
         trial_count = 0
 
         begin_time = time.time()
+        # import pdb; pdb.set_trace()
+
         for batch_idx, data in enumerate(train_loader):
 
             inputs, labels  = data
@@ -1173,6 +1395,10 @@ class DualALMRNNExp(object):
 
 
             loss.backward()
+
+            # for name, param in model.named_parameters():
+            #     if param.grad is not None:
+            #         print(f'{name} grad: {param.grad.norm()}')
 
             optimizer.step()
 
@@ -1405,6 +1631,96 @@ class DualALMRNNExp(object):
         plt.close()
         
         print(f'Weight evolution analysis saved to {fig_save_path}')
+
+
+    def plot_single_readout(self, datatype='test'):
+        '''
+        Plot the single readout weights for single readout RNNs
+        '''
+
+        train_type_str = self.configs['train_type']
+        init_cross_hemi_rel_factor = self.configs['init_cross_hemi_rel_factor']
+        random_seed = self.configs['random_seed']     
+
+
+        model_type = self.configs['model_type']
+        
+        uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+
+
+        test_random_seed = self.configs['test_random_seed']
+
+        np.random.seed(test_random_seed)
+        torch.manual_seed(test_random_seed)
+
+        self.init_sub_path('train_type_modular')
+
+
+
+        # Detect devices
+        use_cuda = bool(self.configs['use_cuda'])
+        if use_cuda and not torch.cuda.is_available():
+            use_cuda = False
+        
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
+
+        if use_cuda:
+            params = {'batch_size': self.configs['bs'], 'shuffle': False, 'num_workers': self.configs['num_workers'], \
+            'pin_memory': bool(self.configs['pin_memory'])}
+        else:
+            params = {'batch_size': self.configs['bs'], 'shuffle': False}
+
+        # test
+
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+
+        test_set = data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
+
+        test_loader = data.DataLoader(test_set, **params)
+
+        train_save_path = os.path.join(self.configs['data_dir'], 'train')
+
+        train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+
+        train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
+
+        train_loader = data.DataLoader(train_set, **params, drop_last=True)
+
+        '''
+        Load the saved model.
+        '''
+
+        import sys
+        model = getattr(sys.modules[__name__], model_type)(self.configs, \
+            self.a, self.pert_begin, self.pert_end).to(device)
+
+        model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
+        # os.path.join(self.configs['models_dir'], model_type, self.sub_path)
+        print("model: ", model_save_path)
+        state_dict = torch.load(os.path.join(model_save_path, 'best_model.pth'), weights_only=True)
+
+        model.load_state_dict(state_dict)
+
+        data_loader = test_loader if datatype == 'test' else train_loader
+
+        hs, label, zs = self.get_neurons_trace(model, device, data_loader, model_type, single_readout=True, return_pred_labels=True)
+        print(label==zs)
+        # Plot zs for each trial, colored by label (red for 0, blue for 1)
+        plt.figure(figsize=(8, 5))
+        for i in range(hs.shape[0]):
+            if label[i] == 0:
+                plt.plot(hs[i, :, 0], color='red', alpha=0.5)
+            elif label[i] == 1:
+                plt.plot(hs[i, :, 0], color='blue', alpha=0.5)
+        plt.xlabel('Time')
+        plt.ylabel('z (readout)')
+        plt.title('zs for each trial (red: label=0, blue: label=1)')
+        plt.show()
+
 
 
     def plot_cd_traces(self):

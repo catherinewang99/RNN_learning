@@ -19,6 +19,7 @@ import dual_alm_rnn_models
 import itertools
 import time
 
+
 def to_float(x):
     # if it’s a tensor, pull it off-device and to a Python float
     if isinstance(x, torch.Tensor):
@@ -58,8 +59,8 @@ def generate_simple_dataset(exp):
 
 
     n_train_trials = 10
-    n_val_trials = 5
-    n_test_trials = 5
+    n_val_trials = 10
+    n_test_trials = 10
 
     sensory_input_means = 0.5
     sensory_input_stds = 0.05
@@ -92,7 +93,7 @@ def generate_simple_dataset(exp):
         cur_trial_type_inds = np.nonzero(train_trial_type_labels==i)[0]
         gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1) # Positive and negative values of shape (n_trials, T, 1)
         # Left trials (i=0): [1, 0], Right trials (i=1): [0, 1]
-        train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \ 
+        train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
         sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
 
         # Val labels
@@ -131,30 +132,33 @@ def generate_simple_dataset(exp):
     sample_train_inputs = train_sensory_inputs[sample_inds]
     sample_train_labels = train_trial_type_labels[sample_inds]
 
-def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
+def train_minimal_rnn_simple_data(left_amp, right_amp, exp):
     """Train a minimal RNN with specific input amplitudes using prebuilt functions"""
     print(f"\nTraining RNN with left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
     
     # Modify configs for minimal RNN
-    configs['n_neurons'] = 2  # Only 2 units total
-    configs['n_epochs'] = 10  # Train for 10 epochs
-    configs['one_hot'] = 1    # Use one-hot encoding
+    exp.configs['n_neurons'] = 2  # Only 2 units total
+    exp.configs['n_epochs'] = 10  # Train for 10 epochs
+    exp.configs['one_hot'] = 1    # Use one-hot encoding
     
-    # Update configs for this specific training run
-    configs['xs_left_alm_amp'] = left_amp
-    configs['xs_right_alm_amp'] = right_amp
+    exp.configs['bs'] = 1
 
-    configs['lr'] = 1e-2
+    # Update configs for this specific training run
+    exp.configs['xs_left_alm_amp'] = left_amp
+    exp.configs['xs_right_alm_amp'] = right_amp
+
+    exp.configs['lr'] = 1e-2
+ 
     
     # Initialize model
-    model_type = configs['model_type']
-    model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
-    model_save_path = os.path.join(exp.configs['models_dir'], f'small_rnn_{configs["random_seed"]}')
+    model_type = exp.configs['model_type']
+    model = getattr(dual_alm_rnn_models, model_type)(exp.configs, exp.a, exp.pert_begin, exp.pert_end, zero_init_cross_hemi=True)
+    model_save_path = os.path.join(exp.configs['models_dir'], f'small_rnn_{exp.configs["random_seed"]}')
     os.makedirs(model_save_path, exist_ok=True)
     # Set device
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
     model = model.to(device)
-    params = {'batch_size': configs['bs'], 'shuffle': True}
+    params = {'batch_size': exp.configs['bs'], 'shuffle': True}
     
     # Load data
     train_save_path = os.path.join(exp.configs['data_dir'], 'train')
@@ -167,7 +171,7 @@ def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
     
     # Create data loaders
     train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
-    train_loader = data.DataLoader(train_set, **params, drop_last=True)
+    train_loader = data.DataLoader(train_set, **params, drop_last=False)
     
     val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
     val_loader = data.DataLoader(val_set, **params)
@@ -175,12 +179,23 @@ def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
     # Explicitly include readout weights
     trainable_params = []
     for name, param in model.named_parameters():
-        if 'rnn_cell' in name or 'readout_linear' in name:
+        if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
+            print(f'Adding {name} to trainable params')
             trainable_params.append(param)
+        # if 'rnn_cell' in name or 'readout_linear' in name:
+            # trainable_params.append(param)
+        
+    # Initialize all trainable weights to 1
+    # with torch.no_grad():
+    #     for name, param in model.named_parameters():
+    #         if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
+    #             param.data.fill_(0.0)
+    #             print(f"Initialized {name} to 0.0")
 
     # Initialize optimizer and loss
-    optimizer = optim.Adam(trainable_params, lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
+    optimizer = optim.Adam(trainable_params, lr=exp.configs['lr'], weight_decay=exp.configs['l2_weight_decay'])
     # optimizer = optim.Adam(model.parameters(), lr=configs['lr'], weight_decay=configs['l2_weight_decay'])
+
     loss_fct = nn.BCEWithLogitsLoss()
     
     # Training loop using prebuilt functions
@@ -194,8 +209,8 @@ def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
 
     best_val_score = float('-inf')
 
-    for epoch in range(configs['n_epochs']):
-        print(f'\nEpoch {epoch+1}/{configs["n_epochs"]}')
+    for epoch in range(exp.configs['n_epochs']):
+        print(f'\nEpoch {epoch+1}/{exp.configs["n_epochs"]}')
 
         epoch_begin_time = time.time()
         # Use prebuilt train_helper function
@@ -222,21 +237,32 @@ def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
         all_epoch_val_losses.append(val_loss)
         all_epoch_val_scores.append(val_score)
 
-        A = np.array([to_float(t) for t in all_epoch_train_losses])
-        B = np.array([to_float(t) for t in all_epoch_train_scores])
-        C = np.array([to_float(t) for t in all_epoch_val_losses])
-        D = np.array([to_float(t) for t in all_epoch_val_scores])
 
-        np.save(os.path.join(model_save_path, 'all_epoch_train_losses.npy'), A)
-        np.save(os.path.join(model_save_path, 'all_epoch_train_scores.npy'), B)
-        np.save(os.path.join(model_save_path, 'all_epoch_val_losses.npy'), C)
-        np.save(os.path.join(model_save_path, 'all_epoch_val_scores.npy'), D)
+        # Save weights after every epoch
+        epoch_weights = {}
+        for name, param in model.named_parameters():
+            if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
+                # print(f'Saving {name} to {model_save_path}')
+                epoch_weights[name] = param.data.cpu().numpy().copy()
+
+        np.save(os.path.join(model_save_path, f'epoch_{epoch}_weights.npy'), epoch_weights)
+
 
         epoch_end_time = time.time()
 
         print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
         print(f'Best val score: {best_val_score}')
         print('')
+
+    A = np.array([to_float(t) for t in all_epoch_train_losses])
+    B = np.array([to_float(t) for t in all_epoch_train_scores])
+    C = np.array([to_float(t) for t in all_epoch_val_losses])
+    D = np.array([to_float(t) for t in all_epoch_val_scores])
+
+    np.save(os.path.join(model_save_path, 'all_epoch_train_losses.npy'), A)
+    np.save(os.path.join(model_save_path, 'all_epoch_train_scores.npy'), B)
+    np.save(os.path.join(model_save_path, 'all_epoch_val_losses.npy'), C)
+    np.save(os.path.join(model_save_path, 'all_epoch_val_scores.npy'), D)
 
     
     # Extract final weights
@@ -268,6 +294,11 @@ def train_minimal_rnn_simple_data(configs, left_amp, right_amp, exp):
         for name, param in model.named_parameters():
             final_weights[name] = param.data.cpu().numpy().copy()
 
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
+
+    plot_readout(exp, model, device, train_loader, model_type)
+
+
     return final_weights, all_epoch_train_losses, all_epoch_val_losses, all_epoch_train_scores, all_epoch_val_scores
 
 
@@ -277,17 +308,17 @@ def train_minimal_rnn(configs, left_amp, right_amp, exp, simple_data):
     print(f"\nTraining RNN with left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
     
     # Modify configs for minimal RNN
-    configs['n_neurons'] = 2  # Only 2 units total
-    configs['n_epochs'] = 10  # Train for 10 epochs
-    configs['one_hot'] = 1    # Use one-hot encoding
+    exp.configs['n_neurons'] = 2  # Only 2 units total
+    exp.configs['n_epochs'] = 10  # Train for 10 epochs
+    exp.configs['one_hot'] = 1    # Use one-hot encoding
     
     # Update configs for this specific training run
-    configs['xs_left_alm_amp'] = left_amp
-    configs['xs_right_alm_amp'] = right_amp
+    exp.configs['xs_left_alm_amp'] = left_amp
+    exp.configs['xs_right_alm_amp'] = right_amp
     
     # Initialize model
-    model_type = configs['model_type']
-    model = getattr(dual_alm_rnn_models, model_type)(configs, exp.a, exp.pert_begin, exp.pert_end)
+    model_type = exp.configs['model_type']
+    model = getattr(dual_alm_rnn_models, model_type)(exp.configs, exp.a, exp.pert_begin, exp.pert_end)
     model_save_path = os.path.join(exp.configs['models_dir'], f'small_rnn_{configs["random_seed"]}')
     os.makedirs(model_save_path, exist_ok=True)
     # Set device
@@ -515,6 +546,71 @@ def analyze_weight_relationships(configs, weights_dict, left_amp, right_amp):
 
     return results
 
+def plot_readout(exp, model, device, val_loader, model_type):
+    """Plot the readout weights for a given input"""
+    # import pdb; pdb.set_trace()
+    hs, label, zs = exp.get_neurons_trace(model, device, val_loader, model_type, single_readout=True, return_pred_labels=True)
+    print(label==zs)
+    # Plot zs for each trial, colored by label (red for 0, blue for 1)
+    plt.figure(figsize=(8, 5))
+    for i in range(hs.shape[0]):
+        if label[i] == 0:
+            plt.plot(hs[i, :, 0], color='red', alpha=0.5)
+        elif label[i] == 1:
+            plt.plot(hs[i, :, 0], color='blue', alpha=0.5)
+    plt.xlabel('Time')
+    plt.ylabel('z (readout)')
+    plt.title('zs for each trial (red: label=0, blue: label=1)')
+    plt.show()
+
+
+    # Plot the sensory input (from val_loader) using the same color scheme as above
+    # Plot all batches in val_loader
+    if False:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+        axes[0].set_title('Left Trials (label=0)')
+        axes[1].set_title('Right Trials (label=1)')
+        channel_colors = ['red', 'blue']
+        channel_labels = ['Channel 0', 'Channel 1']
+
+        for batch in val_loader:
+            sensory_inputs, labels = batch
+            # sensory_inputs and labels are already numpy arrays
+            for i in range(sensory_inputs.shape[0]):
+                label = labels[i]
+                if label == 0:
+                    ax = axes[0]
+                elif label == 1:
+                    ax = axes[1]
+                else:
+                    continue
+                for ch in range(sensory_inputs.shape[2]):
+                    ax.plot(
+                        sensory_inputs[i, :, ch],
+                        color=channel_colors[ch],
+                        alpha=0.5,
+                        label=channel_labels[ch] if i == 0 else None
+                    )
+
+        for ax in axes:
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Sensory Input')
+            # Only add legend once per channel
+            handles, labels_ = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels_, handles))
+            if by_label:
+                ax.legend(by_label.values(), by_label.keys())
+            ax.grid(True, alpha=0.2)
+
+        plt.suptitle('Sensory Input for each trial (red: channel 0, blue: channel 1)')
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+
+
+
+
+    # Load all weights
+
 def plot_results_single_readout(all_results):
     """Create comprehensive visualizations for single readout model"""
     # Extract data for plotting
@@ -624,32 +720,39 @@ def main(training_method):
     
     # Initialize experiment
     exp = DualALMRNNExp()
-    
+
     os.makedirs(f'small_rnn_random_seed_{exp.configs["random_seed"]}', exist_ok=True)
 
     # Generate dataset simple
     # if not os.path.exists(os.path.join(exp.configs['data_dir'], 'train', 'onehot_sensory_inputs_simple.npy')):
     #     print("Generating simple one-hot dataset...")
-    generate_simple_dataset(exp)
-    
+    # generate_simple_dataset(exp)
+
+
     # Train RNN for each input asymmetry
-    if training_method == "simple_data":
+    if training_method == "modular_single_readout":
+        exp.train_type_modular_single_readout()
 
-        # Train the RNN using prebuilt functions
+    elif training_method == "simple_data":
         weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn_simple_data(
-            exp.configs.copy(), 1.0, 1.0, exp
+            1.0, 1.0, exp
         )
+        if False:
+            all_results = []
+        
+            for left_amp, right_amp in input_asym:
+                exp = DualALMRNNExp()
 
-        # for left_amp, right_amp in input_asym:
-        #     print(f"\n{'='*60}")
-        #     print(f"Testing: left_amp={left_amp:.1f}, right_amp={right_amp:.1f}")
-        #     print(f"{'='*60}")
-            
-            # # Train the RNN using prebuilt functions
-            # weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn_simple_data(
-            #     exp.configs.copy(), left_amp, right_amp, exp
-            # )
 
+                # Train the RNN using prebuilt functions
+                weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn_simple_data(
+                    left_amp, right_amp, exp
+                )
+                results = analyze_weight_relationships(exp.configs, weights, left_amp, right_amp)
+                all_results.append(results)
+
+
+            fig = plot_results_single_readout(all_results)
 
     elif training_method == "brute_force":
         if os.path.exists('minimal_rnn_results_brute_force.npy'):
@@ -701,12 +804,12 @@ def main(training_method):
             np.save('small_rnn_random_seed_{exp.configs["random_seed"]}/minimal_rnn_results.npy', all_results)
             print("\nResults saved to 'minimal_rnn_results.npy'")
 
-    # Create visualizations
-    print("\nCreating visualizations...")
-    if exp.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
-        fig = plot_results_single_readout(all_results)
-    else:
-        fig = plot_results(all_results)
+        # Create visualizations
+        print("\nCreating visualizations...")
+        if exp.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+            fig = plot_results_single_readout(all_results)
+        else:
+            fig = plot_results(all_results)
     
 
     
@@ -722,4 +825,4 @@ def main(training_method):
     #           f"Ratio: {r['input_ratio']:.2f}")
 
 if __name__ == "__main__":
-    main("simple_data")
+    main("modular_single_readout")

@@ -588,11 +588,15 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
 
     def init_params(self):
+        print("Matching weights for left and right ALM")
         init.normal_(self.w_xh_linear_left_alm.weight, 0.0, 1)
-        init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
+        # init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
+        self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
 
-
-        init.normal_(self.readout_linear.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+        # Set all values in readout_linear to be the same value drawn from normal distribution
+        val = torch.normal(mean=0.0, std=1.0/math.sqrt(self.n_neurons), size=(1,))
+        with torch.no_grad():
+            self.readout_linear.weight.fill_(val.item())
         init.constant_(self.readout_linear.bias, 0.0)
 
     def apply_pert(self, h, left_pert_trial_inds, right_pert_trial_inds):
@@ -687,6 +691,9 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
             xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
             xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+            # xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
+            # xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
 
         xs_injected = torch.cat([xs_injected_left_alm, xs_injected_right_alm], 2)
 
