@@ -185,17 +185,20 @@ def visualize_rnn_weights(model_path, save_path=None, figsize=(12, 12)):
     max_weight = np.max(np.abs(non_zero_weights))
     min_weight = np.min(np.abs(non_zero_weights))
     
-    # Draw input connections (8 arrows total: L->L1,L2,R1,R2 and R->L1,L2,R1,R2)
+    # Draw input connections (8 arrows total: L/R sensory inputs to all 4 neurons)
+    # w_xh_linear_left_alm: (2, 2) - 2D input to 2 left hemisphere neurons
+    # w_xh_linear_right_alm: (2, 2) - 2D input to 2 right hemisphere neurons
+    # Both weight matrices take the same 2D one-hot input [left_channel, right_channel]
     input_connections = [
-        # Left sensory input to all 4 recurrent units
+        # Left sensory input (channel 0) to all 4 neurons
         (sensory_left_x, sensory_y, recurrent_x_positions[0], recurrent_y, weights['input_left'][0, 0]),  # L->L1
         (sensory_left_x, sensory_y, recurrent_x_positions[1], recurrent_y, weights['input_left'][0, 1]),  # L->L2
-        (sensory_left_x, sensory_y, recurrent_x_positions[2], recurrent_y, weights['input_left'][1, 0]),  # L->R1
-        (sensory_left_x, sensory_y, recurrent_x_positions[3], recurrent_y, weights['input_left'][1, 1]),  # L->R2
+        (sensory_left_x, sensory_y, recurrent_x_positions[2], recurrent_y, weights['input_right'][0, 0]),  # L->R1
+        (sensory_left_x, sensory_y, recurrent_x_positions[3], recurrent_y, weights['input_right'][0, 1]),  # L->R2
         
-        # Right sensory input to all 4 recurrent units
-        (sensory_right_x, sensory_y, recurrent_x_positions[0], recurrent_y, weights['input_right'][0, 0]),  # R->L1
-        (sensory_right_x, sensory_y, recurrent_x_positions[1], recurrent_y, weights['input_right'][0, 1]),  # R->L2
+        # Right sensory input (channel 1) to all 4 neurons
+        (sensory_right_x, sensory_y, recurrent_x_positions[0], recurrent_y, weights['input_left'][1, 0]),  # R->L1
+        (sensory_right_x, sensory_y, recurrent_x_positions[1], recurrent_y, weights['input_left'][1, 1]),  # R->L2
         (sensory_right_x, sensory_y, recurrent_x_positions[2], recurrent_y, weights['input_right'][1, 0]),  # R->R1
         (sensory_right_x, sensory_y, recurrent_x_positions[3], recurrent_y, weights['input_right'][1, 1]),  # R->R2
     ]
@@ -358,7 +361,7 @@ def main():
     # Use the first available model (you can modify this to choose a specific one)
     model_path = model_paths[0]
 
-    model_path='dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular/onehot/n_neurons_4_random_seed_0/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.00/init_cross_hemi_rel_factor_0.20'
+    model_path='dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular/onehot/n_neurons_4_random_seed_0/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.50/init_cross_hemi_rel_factor_0.20'
     
     print(f"Using model: {model_path}")
     
