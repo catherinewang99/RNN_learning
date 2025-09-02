@@ -731,7 +731,13 @@ def main(training_method):
 
     # Train RNN for each input asymmetry
     if training_method == "modular_single_readout":
-        exp.train_type_modular_single_readout()
+        
+        for left_amp, right_amp in input_asym:
+            exp.configs['xs_left_alm_amp'] = left_amp
+            exp.configs['xs_right_alm_amp'] = right_amp
+            exp.train_type_modular_single_readout()
+
+
 
     elif training_method == "simple_data":
         weights, train_losses, val_losses, train_scores, val_scores = train_minimal_rnn_simple_data(

@@ -414,7 +414,106 @@ class DualALMRNNExp(object):
         sample_train_inputs = train_sensory_inputs[sample_inds]
         sample_train_labels = train_trial_type_labels[sample_inds]
 
+    def generate_dataset_simple(self):
+        """
+        Generate a simple dataset with few trials of few time steps each.
+        """
+        random_seed = self.configs['dataset_random_seed']
 
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+
+        T = self.T
+        sample_begin = self.sample_begin
+        delay_begin = self.delay_begin
+
+        presample_mask = np.zeros((T,), dtype=bool)
+        presample_mask[:sample_begin] = True
+        presample_inds = np.arange(0,sample_begin)
+
+        sample_mask = np.zeros((T,), dtype=bool)
+        sample_mask[sample_begin:delay_begin] = True
+        sample_inds = np.arange(sample_begin,delay_begin)
+
+
+        delay_mask = np.zeros((T,), dtype=bool)
+        delay_mask[delay_begin:] = True
+        delay_inds = np.arange(delay_begin,T)
+
+
+        n_train_trials = 1000
+        n_val_trials = 500
+        n_test_trials = 500
+
+        sensory_input_means = 0.5
+        sensory_input_stds = 0.05
+
+        '''
+        Generate the train, val and test set.
+        '''
+
+        # Change input dimension from 1 to 2 (one-hot encoding)
+        train_sensory_inputs = np.zeros((n_train_trials, T, 2), dtype=np.float32)
+        val_sensory_inputs = np.zeros((n_val_trials, T, 2), dtype=np.float32) 
+        test_sensory_inputs = np.zeros((n_test_trials, T, 2), dtype=np.float32)
+
+        train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
+        val_trial_type_labels = np.zeros((n_val_trials,), dtype=int)
+        test_trial_type_labels = np.zeros((n_test_trials,), dtype=int)
+
+        # Labels of trial type (random)
+        shuffled_inds = np.random.permutation(n_train_trials)
+        train_trial_type_labels[shuffled_inds[:n_train_trials//2]] = 1
+        shuffled_inds = np.random.permutation(n_val_trials)
+        val_trial_type_labels[shuffled_inds[:n_val_trials//2]] = 1
+        shuffled_inds = np.random.permutation(n_test_trials)
+        test_trial_type_labels[shuffled_inds[:n_test_trials//2]] = 1
+        
+        # For each trial type, set the appropriate one-hot channel
+        for i in range(self.n_trial_types):
+
+            # Train labels first
+            cur_trial_type_inds = np.nonzero(train_trial_type_labels==i)[0]
+            gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1) # Positive and negative values of shape (n_trials, T, 1)
+            # Left trials (i=0): [1, 0], Right trials (i=1): [0, 1]
+            train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
+
+            # Val labels
+            cur_trial_type_inds = np.nonzero(val_trial_type_labels==i)[0]
+            gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            val_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
+
+            # Test labels
+            cur_trial_type_inds = np.nonzero(test_trial_type_labels==i)[0]
+            gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            test_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means + sensory_input_stds*gaussian_samples # Only use the positive values
+
+
+        '''
+        Save.
+        '''
+        train_save_path = os.path.join(self.configs['data_dir'], 'train')
+        os.makedirs(train_save_path, exist_ok=True)
+        np.save(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy'), train_sensory_inputs)
+        np.save(os.path.join(train_save_path, 'onehot_trial_type_labels_simple.npy'), train_trial_type_labels)
+
+        val_save_path = os.path.join(self.configs['data_dir'], 'val')
+        os.makedirs(val_save_path, exist_ok=True)
+        np.save(os.path.join(val_save_path, 'onehot_sensory_inputs_simple.npy'), val_sensory_inputs)
+        np.save(os.path.join(val_save_path, 'onehot_trial_type_labels_simple.npy'), val_trial_type_labels)
+
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+        os.makedirs(test_save_path, exist_ok=True)
+        np.save(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy'), test_sensory_inputs)
+        np.save(os.path.join(test_save_path, 'onehot_trial_type_labels_simple.npy'), test_trial_type_labels)
+
+
+        sample_inds = np.random.permutation(n_train_trials)[:10]
+        sample_train_inputs = train_sensory_inputs[sample_inds]
+        sample_train_labels = train_trial_type_labels[sample_inds]
 
 
 
@@ -1104,14 +1203,15 @@ class DualALMRNNExp(object):
 
         model_type = self.configs['model_type']
 
+        train_type = self.configs['train_type']
 
-        self.init_sub_path('train_type_modular')
+        self.init_sub_path(train_type)
 
 
         model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
 
+        logs_save_path = os.path.join(self.configs['logs_dir'], model_type, self.sub_path)
 
-        logs_save_path = os.path.join(self.configs['logs_dir'], self.configs['model_type'], self.sub_path)
         self.logs_save_path = logs_save_path
 
         os.makedirs(model_save_path, exist_ok=True)
@@ -1173,7 +1273,7 @@ class DualALMRNNExp(object):
 
         import sys
         model = getattr(sys.modules[__name__], model_type)(self.configs, \
-            self.a, self.pert_begin, self.pert_end).to(device)
+            self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=True).to(device)
 
 
 
@@ -1186,7 +1286,7 @@ class DualALMRNNExp(object):
 
 
         for name, param in model.named_parameters():
-            if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
+            if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
                 params_within_hemi.append(param)
             elif ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                 params_cross_hemi.append(param)
@@ -1237,6 +1337,11 @@ class DualALMRNNExp(object):
         for epoch in range(self.configs['n_epochs']):
             epoch_begin_time = time.time()
 
+            if train_type == 'train_type_modular_corruption':
+                if epoch >= self.configs['corruption_start_epoch']:
+                    print('Adding corruption to the training data at epoch {}'.format(epoch + 1))
+                    model.corrupt = True
+
 
             print('')
             print('Within-hemi training')
@@ -1245,7 +1350,7 @@ class DualALMRNNExp(object):
 
             train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
             total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
-            np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
+            # np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
               # After optimizer.step() and epoch ends
             # val_results = self.eval_with_perturbations(
             #     model=model,
@@ -1282,7 +1387,7 @@ class DualALMRNNExp(object):
 
 
             # Track weights after each epoch
-            self.track_weights(model, epoch, 'within_hemi', logs_save_path)
+            # self.track_weights(model, epoch, 'within_hemi', logs_save_path)
 
             epoch_end_time = time.time()
 
@@ -1498,6 +1603,8 @@ class DualALMRNNExp(object):
 
 
         return total_loss, total_score
+
+
 
 
 

@@ -516,6 +516,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         self.return_input = return_input
 
         self.configs = configs
+        self.symmetric_weights = False
 
         self.a = a
         self.pert_begin = pert_begin
@@ -590,13 +591,18 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
     def init_params(self):
         print("Matching weights for left and right ALM")
         init.normal_(self.w_xh_linear_left_alm.weight, 0.0, 1)
-        # init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
-        self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
+        if self.symmetric_weights:
+            self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
+        else:
+            init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
 
         # Set all values in readout_linear to be the same value drawn from normal distribution
-        val = torch.normal(mean=0.0, std=1.0/math.sqrt(self.n_neurons), size=(1,))
-        with torch.no_grad():
-            self.readout_linear.weight.fill_(val.item())
+        if self.symmetric_weights:
+            val = torch.normal(mean=0.0, std=1.0/math.sqrt(self.n_neurons), size=(1,))
+            with torch.no_grad():
+                self.readout_linear.weight.fill_(val.item())
+        else:
+            init.normal_(self.readout_linear.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
         init.constant_(self.readout_linear.bias, 0.0)
 
     def apply_pert(self, h, left_pert_trial_inds, right_pert_trial_inds):
