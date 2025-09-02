@@ -173,12 +173,12 @@ def generate_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test",
     return H_samples
 
 # Generate hidden states from test data (control trials, no perturbations)
-H_samples = generate_state_sequence(model, use_perturbations=False)
+H_samples = generate_state_sequence(model, configs['one_hot'], use_perturbations=False)
 
 # Alternative: Generate hidden states with perturbations
 # H_samples = generate_state_sequence(model, use_perturbations=True, pert_type="left")
 
-def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test", 
+def generate_cd_state_sequence(model, one_hot, test_stimuli_path="dual_alm_rnn_data/test", 
                               use_perturbations=False, pert_type="left"):
     """
     Generate CD projection sequences for left and right hemispheres.
@@ -199,9 +199,13 @@ def generate_cd_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/test"
     from torch.utils import data
     
     # Load test data
-    test_sensory_inputs = np.load(os.path.join(test_stimuli_path, 'sensory_inputs.npy'))
-    test_trial_type_labels = np.load(os.path.join(test_stimuli_path, 'trial_type_labels.npy'))
-    
+    if one_hot:
+        test_sensory_inputs = np.load(os.path.join(test_stimuli_path, 'onehot_sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_stimuli_path, 'onehot_trial_type_labels.npy'))
+    else:
+        test_sensory_inputs = np.load(os.path.join(test_stimuli_path, 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_stimuli_path, 'trial_type_labels.npy'))
+        
     # Create data loader
     test_set = data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
     test_loader = data.DataLoader(test_set, batch_size=256, shuffle=False)
