@@ -668,6 +668,9 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         # input noise
         xs_noise_left_alm = math.sqrt(2/self.a)*self.sigma_input_noise*torch.randn_like(xs)
         xs_noise_right_alm = math.sqrt(2/self.a)*self.sigma_input_noise*torch.randn_like(xs)
+
+        if self.symmetric_weights:
+            xs_noise_left_alm = xs_noise_right_alm
         
         if self.one_hot:
             # Input masks - now need to match 2D input
@@ -682,7 +685,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             
             corr_level = self.corruption_noise
             if self.one_hot:
-                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian
+                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 0.5) # shift the mean of the gaussian to match the mean of the input
 
             elif self.corruption_type == "poisson":
                 # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)

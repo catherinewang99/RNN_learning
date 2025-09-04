@@ -30,13 +30,13 @@
     "xs_left_alm_drop_p":0.0,
     "xs_right_alm_drop_p":0.0,
     "xs_left_alm_amp":1.0,
-    "xs_right_alm_amp":0.2,
+    "xs_right_alm_amp":0.4,
     "across_hemi_n_epochs":0,
     "init_cross_hemi_rel_factor":0.2,
 
 
-    "corruption_start_epoch":9,
-    "corruption_noise": 1.4,
+    "corruption_start_epoch":15,
+    "corruption_noise": 10,
     "corruption_type":"gaussian",
 
     "one_hot":1

@@ -14,7 +14,7 @@ input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.3), (1,0.4), (1,0.5), (1,1), (0.5,1)
 
 # Initialize experiment
 exp = DualALMRNNExp()
-weights_dict = np.load('small_rnn_sherlock_weights.npy', allow_pickle=True)
+weights_dict = np.load('small_rnn_sherlock_weights_corruption.npy', allow_pickle=True)
 
 all_weights = []
 control_std = []

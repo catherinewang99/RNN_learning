@@ -10,7 +10,7 @@ from dual_alm_rnn_exp import DualALMRNNExp
 
 plt.rcParams['pdf.fonttype'] = '42' 
 
-def load_model_weights(model_path):
+def load_model_weights(model_path, model_type):
     
     """
     Load weights from a trained model
@@ -33,7 +33,11 @@ def load_model_weights(model_path):
     model = TwoHemiRNNTanh_single_readout(configs, a, pert_begin, pert_end)
     
     # Load trained weights
-    checkpoint_path = os.path.join(model_path, 'best_model.pth')
+    # if os.path.exists(os.path.join(model_path, 'last_model.pth')):
+    #     checkpoint_path = os.path.join(model_path, 'last_model.pth')
+    # else:
+    #     checkpoint_path = os.path.join(model_path, 'best_model.pth')
+    checkpoint_path = os.path.join(model_path, model_type + '_model.pth')
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Model checkpoint not found at {checkpoint_path}")
     
@@ -58,7 +62,7 @@ def load_model_weights(model_path):
     
     return weights, configs
 
-def visualize_rnn_weights(model_path, configs, save_path=None, figsize=(12, 12)):
+def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsize=(12, 12)):
     """
     Create a comprehensive visualization of RNN weights
     
@@ -68,7 +72,7 @@ def visualize_rnn_weights(model_path, configs, save_path=None, figsize=(12, 12))
         figsize: Figure size (width, height)
     """
     # Load weights
-    weights, configs = load_model_weights(model_path)
+    weights, configs = load_model_weights(model_path, model_type)
     
     # Create figure
     fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -376,8 +380,8 @@ def main():
     print(f"Using model: {model_path}")
     
     # Create visualization
-    save_path = 'figs/rnn_L{}_R{}_weights_visualization.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'])
-    weights = visualize_rnn_weights(model_path, configs, save_path=save_path)
+    save_path = 'figs/rnn_L{}_R{}_weights_visualization_{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['train_type'])
+    weights = visualize_rnn_weights(model_path, configs, 'best', save_path=save_path)
     
     # Print weight summary
     print("\nWeight Summary:")

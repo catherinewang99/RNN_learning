@@ -19,11 +19,21 @@ plt.rcParams['pdf.fonttype'] = '42'
 
 ### Plot single examples, corrupted vs control ###
 
-if False:
+if True:
     exp = DualALMRNNExp()
 
 
-    results_dict = np.load('dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['random_seed'], exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp']), allow_pickle=True)
+    results_dict = np.load(
+        'dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+            exp.configs['corruption_type'],
+            exp.configs['corruption_start_epoch'],
+            float(exp.configs['corruption_noise']),
+            exp.configs['random_seed'],
+            float(exp.configs['xs_left_alm_amp']),
+            float(exp.configs['xs_right_alm_amp'])
+        ),
+        allow_pickle=True
+    )
     epochs = np.arange(1, len(results_dict) + 1)
     readout_acc_left = np.array([results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))])
     readout_acc_right = np.array([results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))])
@@ -69,7 +79,7 @@ if False:
 
 
 
-if True:
+if False:
 
 
     ### Plot control results over seeds ###
@@ -112,7 +122,8 @@ if True:
                     results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], seed, left_amp, right_amp), allow_pickle=True)
                 elif exp.configs['train_type'] == 'train_type_modular':
                     results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_single_readout/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(seed, left_amp, right_amp), allow_pickle=True)
-                
+                elif exp.configs['train_type'] == 'train_type_modular_symmetric':
+                    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_symmetric/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(seed, left_amp, right_amp), allow_pickle=True)
                 # Extract metrics for this seed
                 readout_acc_left = np.array([results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))])
                 readout_acc_right = np.array([results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))])

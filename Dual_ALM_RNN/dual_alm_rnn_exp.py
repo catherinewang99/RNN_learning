@@ -1396,6 +1396,8 @@ class DualALMRNNExp(object):
 
             print('Epoch {} total time: {:.3f} s'.format(epoch+1, epoch_end_time - epoch_begin_time))
             print('')
+        
+        torch.save(model.state_dict(), os.path.join(model_save_path, 'last_model.pth'))  # save model
 
         A = np.array([to_float(t) for t in all_epoch_train_losses])
         B = np.array([to_float(t) for t in all_epoch_train_scores])
@@ -1742,6 +1744,80 @@ class DualALMRNNExp(object):
         plt.close()
         
         print(f'Weight evolution analysis saved to {fig_save_path}')
+
+
+
+    def plot_example_sensory_inputs(self):
+        '''
+        Plot the example sensory inputs for the model
+        include corrupted AND non corrupted trials
+        '''
+        
+        train_type_str = self.configs['train_type']
+        init_cross_hemi_rel_factor = self.configs['init_cross_hemi_rel_factor']
+        random_seed = self.configs['random_seed']     
+
+
+        model_type = self.configs['model_type']
+        
+        uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+
+
+        test_random_seed = self.configs['test_random_seed']
+
+        np.random.seed(test_random_seed)
+        torch.manual_seed(test_random_seed)
+
+        self.init_sub_path('train_type_modular')
+
+
+
+        # Detect devices
+        use_cuda = bool(self.configs['use_cuda'])
+        if use_cuda and not torch.cuda.is_available():
+            use_cuda = False
+        
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
+
+        if use_cuda:
+            params = {'batch_size': self.configs['bs'], 'shuffle': False, 'num_workers': self.configs['num_workers'], \
+            'pin_memory': bool(self.configs['pin_memory'])}
+        else:
+            params = {'batch_size': self.configs['bs'], 'shuffle': False}
+
+        # test
+
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+
+        test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+
+        test_set = data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
+
+        test_loader = data.DataLoader(test_set, **params)
+        import sys
+        model = getattr(sys.modules[__name__], model_type)(self.configs, \
+            self.a, self.pert_begin, self.pert_end).to(device)
+
+        model_save_path = os.path.join(self.configs['models_dir'], model_type, self.sub_path)
+        # os.path.join(self.configs['models_dir'], model_type, self.sub_path)
+        print("model: ", model_save_path)
+        state_dict = torch.load(os.path.join(model_save_path, 'best_model.pth'), weights_only=True)
+
+        model.load_state_dict(state_dict)
+
+        model.return_input = True
+        for batch_idx, data in enumerate(test_loader):
+            inputs, labels  = data
+            inputs, labels = inputs.to(device), labels.to(device)
+            break
+
+        (sensory_inputs), _, _ = model(inputs) # may need to change the input
+        left_alm_inputs, right_alm_inputs = sensory_inputs[0], sensory_inputs[1]
+
+        model.corrupt = True
+        (sensory_inputs_corrupted), _, _ = model(inputs) # may need to change the input
+        left_alm_inputs_corrupted, right_alm_inputs_corrupted = sensory_inputs_corrupted[0], sensory_inputs_corrupted[1]
 
 
     def plot_single_readout(self, datatype='test'):
