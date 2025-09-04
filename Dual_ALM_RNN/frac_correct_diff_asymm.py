@@ -52,7 +52,7 @@ plt.xlabel('Input asymmetry')
 # plt.ylim(0, 1)
 plt.xticks([-1,0,1],[-1,0,1])
 # plt.legend()
-plt.savefig('all_competition_tenseeds.pdf')
+plt.savefig('figs/all_competition_tenseeds.pdf')
 plt.show()
 
 

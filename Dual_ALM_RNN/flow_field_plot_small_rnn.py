@@ -204,7 +204,7 @@ def generate_readout_state_sequence(model, test_stimuli_path="dual_alm_rnn_data/
     
     # Create data loader
     test_set = data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
-    test_loader = data.DataLoader(test_set, batch_size=256, shuffle=False)
+    test_loader = data.DataLoader(test_set, batch_size=model.configs['bs'], shuffle=False)
     
     # Set model to eval mode
     model.eval()

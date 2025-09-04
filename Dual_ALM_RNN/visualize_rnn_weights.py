@@ -6,6 +6,7 @@ from matplotlib.patches import FancyArrowPatch, Circle
 import os
 import json
 from dual_alm_rnn_models import TwoHemiRNNTanh_single_readout
+from dual_alm_rnn_exp import DualALMRNNExp
 
 plt.rcParams['pdf.fonttype'] = '42' 
 
@@ -57,7 +58,7 @@ def load_model_weights(model_path):
     
     return weights, configs
 
-def visualize_rnn_weights(model_path, save_path=None, figsize=(12, 12)):
+def visualize_rnn_weights(model_path, configs, save_path=None, figsize=(12, 12)):
     """
     Create a comprehensive visualization of RNN weights
     
@@ -157,7 +158,7 @@ def visualize_rnn_weights(model_path, save_path=None, figsize=(12, 12)):
             thickness = max(0.1, min(8.0, thickness))  # Clamp between 0.1 and 8.0
         
         # Color based on sign
-        color = 'red' if weight_value < 0 else 'blue'
+        color = 'blue' if weight_value < 0 else 'red'
         
         return thickness, color
     
@@ -276,8 +277,9 @@ def visualize_rnn_weights(model_path, save_path=None, figsize=(12, 12)):
                                   linewidth=thickness, color=color, alpha=0.8)
             ax.add_patch(arrow)
     
+
     # Add title
-    ax.text(5, 9.5, 'RNN Weight Visualization', ha='center', va='center', 
+    ax.text(5, 9.5, 'RNN Weight Visualization: L={}, R={}'.format(configs['xs_left_alm_amp'], configs['xs_right_alm_amp']), ha='center', va='center', 
             fontsize=16, fontweight='bold')
     
     # Add reference arrows showing thickest and thinnest weights
@@ -311,8 +313,8 @@ def visualize_rnn_weights(model_path, save_path=None, figsize=(12, 12)):
     
     # Add color legend for positive/negative
     legend_elements = [
-        plt.Line2D([0], [0], color='blue', linewidth=3, label='Positive weights'),
-        plt.Line2D([0], [0], color='red', linewidth=3, label='Negative weights')
+        plt.Line2D([0], [0], color='red', linewidth=3, label='Positive weights'),
+        plt.Line2D([0], [0], color='blue', linewidth=3, label='Negative weights')
     ]
     ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98))
     
@@ -361,13 +363,21 @@ def main():
     # Use the first available model (you can modify this to choose a specific one)
     model_path = model_paths[0]
 
-    model_path='dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular/onehot/n_neurons_4_random_seed_0/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.50/init_cross_hemi_rel_factor_0.20'
+    # model_path='dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular/onehot/n_neurons_4_random_seed_0/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20'
+    # model_path='dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_gaussian_epoch_10_noise_1.40/n_neurons_4_random_seed_0/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_0.20/init_cross_hemi_rel_factor_0.20'
+    with open('dual_alm_rnn_configs.json', 'r') as f:
+        configs = json.load(f)
     
+    exp = DualALMRNNExp()
+    exp.configs = configs
+    exp.init_sub_path(configs['train_type'])
+    model_path = os.path.join(configs['models_dir'], configs['model_type'], exp.sub_path)
+
     print(f"Using model: {model_path}")
     
     # Create visualization
-    save_path = 'rnn_weights_visualization.pdf'
-    weights = visualize_rnn_weights(model_path, save_path=save_path)
+    save_path = 'figs/rnn_L{}_R{}_weights_visualization.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'])
+    weights = visualize_rnn_weights(model_path, configs, save_path=save_path)
     
     # Print weight summary
     print("\nWeight Summary:")

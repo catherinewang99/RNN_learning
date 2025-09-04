@@ -5,7 +5,7 @@
     "plots_dir": "dual_alm_rnn_plots",
     "results_dir": "dual_alm_rnn_results",
     "model_type":"TwoHemiRNNTanh_single_readout",
-    "train_type":"train_type_modular",
+    "train_type":"train_type_modular_corruption",
     "use_cuda":1,
     "gpu_ids":[0],
     "bs":75,
@@ -37,7 +37,7 @@
 
     "corruption_start_epoch":7,
     "corruption_noise": 1.4,
-    "corruption_type":"poisson",
+    "corruption_type":"gaussian",
 
     "one_hot":1
 }

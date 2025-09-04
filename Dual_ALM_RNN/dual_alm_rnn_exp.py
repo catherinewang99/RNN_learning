@@ -1349,18 +1349,21 @@ class DualALMRNNExp(object):
             model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
 
             train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
-            total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
+            # total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
             # np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
               # After optimizer.step() and epoch ends
-            # val_results = self.eval_with_perturbations(
-            #     model=model,
-            #     device=device,
-            #     loader=test_loader,  # or val_loader
-            #     model_type=model_type,
-            #     n_control=500,
-            #     seed=42
-            # )
-            # all_val_results_dict.append(val_results)
+
+            print("Evaluating...")
+            val_results = self.eval_with_perturbations(
+                model=model,
+                device=device,
+                loader=test_loader,  # or val_loader
+                model_type=model_type,
+                n_control=500,
+                seed=42,
+                single_readout=True
+            )
+            all_val_results_dict.append(val_results)
 
             val_loss, val_score = self.val_helper(model, device, val_loader, loss_fct) # On the entire val set.
 
@@ -1479,7 +1482,7 @@ class DualALMRNNExp(object):
             hs: (n_trials, T, n_neurons)
             zs: (n_trials, T, 2) # 2 because we have a readout at each hemisphere, unless single readout
             '''
-            
+
             _, zs = model(inputs)
 
 
@@ -2319,7 +2322,7 @@ class DualALMRNNExp(object):
 
         
 
-    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False):
+    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False):
         """
         Evaluate model accuracy under:
         - Control (no perturbation)
@@ -2335,6 +2338,7 @@ class DualALMRNNExp(object):
             n_control: optional cap on number of control trials to subsample (for speed)
             seed: optional RNG seed for reproducibility of any shuffling
             control_only: if True, only evaluate control condition
+            single_readout: if True, use single readout protocol and skip CD
         
         Returns:
             dict with accuracy scores for each condition
@@ -2343,40 +2347,62 @@ class DualALMRNNExp(object):
             np.random.seed(seed)
             torch.manual_seed(seed)
 
-        # Get CD and decision boundaries for evaluation
-        cds = self.get_cds(model, device, loader, model_type, recompute=False)
+        cds, cd_dbs = None, None
+        if not single_readout:
+            # Get CD and decision boundaries for evaluation
+            cds = self.get_cds(model, device, loader, model_type, recompute=False)
 
-        # Get cd by averaging over delay period:
-        old_cds = cds
+            # Get cd by averaging over delay period:
+            old_cds = cds
 
-        # Average cd over the delay period.
-        cds = np.zeros((2,), dtype=object)
-        for j in range(self.n_loc_names):
-            cds[j] = old_cds[j][self.delay_begin:].mean(0)
-            cds[j] = cds[j]/np.linalg.norm(cds[j]) # (n_neurons in a given hemi)
+            # Average cd over the delay period.
+            cds = np.zeros((2,), dtype=object)
+            for j in range(self.n_loc_names):
+                cds[j] = old_cds[j][self.delay_begin:].mean(0)
+                cds[j] = cds[j]/np.linalg.norm(cds[j]) # (n_neurons in a given hemi)
 
-        cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
+            cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
 
         results = {}
 
         def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None):
             # Get all-neuron labels for reference
-            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False)
+            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, single_readout=single_readout)
             if n_control is not None and len(all_labels) > n_control:
                 indices = np.random.choice(len(all_labels), n_control, replace=False)
             else:
                 indices = np.arange(len(all_labels))
 
-            # Left ALM readout
-            left_hs, _, left_pred_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True, hemi_agree=False)
-            left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
-            # Right ALM readout
-            right_hs, _, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True, hemi_agree=False)
-            right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
-            # Left ALM CD
-            left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs[indices], all_labels[indices], cds[0], cd_dbs[0])
-            # Right ALM CD
-            right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs[indices], all_labels[indices], cds[1], cd_dbs[1])
+
+            if single_readout:
+
+                allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout)
+                
+                readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]  # (1, n_neurons//2)
+                readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]  # (1, n_neurons//2)
+                
+                left_pred_labels = allhs[:, -1, :model.n_neurons//2].dot(readout_left_weight.flatten()) >= 0
+                right_pred_labels = allhs[:, -1, model.n_neurons//2:].dot(readout_right_weight.flatten()) >= 0
+
+                left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
+                right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
+
+            else:
+                # Left ALM readout
+                left_hs, _, left_pred_labels, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='left_ALM', return_pred_labels=True, hemi_agree=False)
+                left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
+                # Right ALM readout
+                right_hs, _, _, right_pred_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='right_ALM', return_pred_labels=True, hemi_agree=False)
+                right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
+                
+            left_cd_acc = np.nan
+            right_cd_acc = np.nan
+            if not single_readout:
+                # Left ALM CD
+                left_cd_acc = self._calculate_cd_accuracy_single_hemi(left_hs[indices], all_labels[indices], cds[0], cd_dbs[0])
+                # Right ALM CD
+                right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs[indices], all_labels[indices], cds[1], cd_dbs[1])
+
             return {
                 'readout_accuracy_left': left_readout_acc,
                 'readout_accuracy_right': right_readout_acc,

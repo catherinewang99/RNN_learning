@@ -589,9 +589,10 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
 
     def init_params(self):
-        print("Matching weights for left and right ALM")
         init.normal_(self.w_xh_linear_left_alm.weight, 0.0, 1)
         if self.symmetric_weights:
+            print("Matching weights for left and right ALM")
+
             self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
         else:
             init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
@@ -678,6 +679,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
 
         if self.corrupt:
+            
             corr_level = self.corruption_noise
             if self.one_hot:
                 xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian
@@ -735,7 +737,12 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         zs = self.readout_linear(hs)  # (n_trials, T, 1)
 
         if self.return_input:
-            return xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm, hs, zs
+            if self.corrupt:
+                return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr, 
+                xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
+            else:
+                return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm,
+                xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs
         else:
             return hs, zs
 

@@ -87,7 +87,7 @@ ax2.set_ylim(0.4, 1.05)
 ax2.legend()
 
 plt.tight_layout()
-plt.savefig('figs/LR_readoutacc_and_agreement_corrupted_learning_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['corruption_type']))
+# plt.savefig('figs/LR_readoutacc_and_agreement_corrupted_learning_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['corruption_type']))
 plt.show()
 
 
