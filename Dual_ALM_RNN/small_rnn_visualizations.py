@@ -18,56 +18,58 @@ plt.rcParams['pdf.fonttype'] = '42'
 
 
 ### Plot single examples, corrupted vs control ###
-exp = DualALMRNNExp()
-
-
-results_dict = np.load('dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['random_seed'], exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp']), allow_pickle=True)
-epochs = np.arange(1, len(results_dict) + 1)
-readout_acc_left = np.array([results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))])
-readout_acc_right = np.array([results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))])
-
-n_trials_agreed = np.array([results_dict[i]['control']['n_trials_agreed'] for i in range(len(results_dict))])
-n_trials = np.array([results_dict[i]['control']['n_trials'] for i in range(len(results_dict))])
-agreement_frac = n_trials_agreed / n_trials
-
-# Compute chance level: p(agree) = p_L^2 + (1-p_L)^2 if p_L = p_R, but here use both
-chance_agree = readout_acc_left * readout_acc_right + (1 - readout_acc_left) * (1 - readout_acc_right)
-
-corruption_start_epoch = exp.configs['corruption_start_epoch']
-
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
-
-# Top subplot: Readout accuracies
-ax1.plot(epochs, readout_acc_left, color='r', label='Left Hemi Readout Accuracy')
-ax1.plot(epochs, readout_acc_right, color='b', label='Right Hemi Readout Accuracy')
-ax1.axvline(corruption_start_epoch, color='r', linestyle=':', linewidth=2, label='Corruption Start (Epoch {})'.format(corruption_start_epoch))
-ax1.set_ylabel('Readout Accuracy (Control)')
-ax1.set_title('Readout Accuracy Over Training (Control Trials)')
-ax1.set_xticks(epochs)
-ax1.set_ylim(0.4, 1.05)
-ax1.legend()
-
-# Bottom subplot: Agreement
-ax2.plot(epochs, agreement_frac, color='k', label='Empirical Agreement (L=R)')
-ax2.plot(epochs, chance_agree, color='gray', linestyle='--', label='Chance Level (Binomial)')
-ax2.axvline(corruption_start_epoch, color='r', linestyle=':', linewidth=2, label='Corruption Start (Epoch {})'.format(corruption_start_epoch))
-ax2.set_xlabel('Epoch')
-ax2.set_ylabel('Fraction of Trials with L=R')
-ax2.set_title('Left/Right ALM Agreement Over Training (Control Trials)')
-ax2.set_xticks(epochs)
-ax2.set_ylim(0.4, 1.05)
-ax2.legend()
-
-plt.tight_layout()
-plt.savefig('figs/LR_readoutacc_and_agreement_corrupted_learning_L{}_R{}_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['corruption_type']))
-plt.show()
-
-
-
-
-
 
 if False:
+    exp = DualALMRNNExp()
+
+
+    results_dict = np.load('dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['random_seed'], exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp']), allow_pickle=True)
+    epochs = np.arange(1, len(results_dict) + 1)
+    readout_acc_left = np.array([results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))])
+    readout_acc_right = np.array([results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))])
+
+    n_trials_agreed = np.array([results_dict[i]['control']['n_trials_agreed'] for i in range(len(results_dict))])
+    n_trials = np.array([results_dict[i]['control']['n_trials'] for i in range(len(results_dict))])
+    agreement_frac = n_trials_agreed / n_trials
+
+    # Compute chance level: p(agree) = p_L^2 + (1-p_L)^2 if p_L = p_R, but here use both
+    chance_agree = readout_acc_left * readout_acc_right + (1 - readout_acc_left) * (1 - readout_acc_right)
+
+    corruption_start_epoch = exp.configs['corruption_start_epoch']
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+
+    # Top subplot: Readout accuracies
+    ax1.plot(epochs, readout_acc_left, color='r', label='Left Hemi Readout Accuracy')
+    ax1.plot(epochs, readout_acc_right, color='b', label='Right Hemi Readout Accuracy')
+    ax1.axvline(corruption_start_epoch, color='r', linestyle=':', linewidth=2, label='Corruption Start (Epoch {})'.format(corruption_start_epoch))
+    ax1.set_ylabel('Readout Accuracy (Control)')
+    ax1.set_title('Readout Accuracy Over Training (Control Trials)')
+    ax1.set_xticks(epochs)
+    ax1.set_ylim(0.4, 1.05)
+    ax1.legend()
+
+    # Bottom subplot: Agreement
+    ax2.plot(epochs, agreement_frac, color='k', label='Empirical Agreement (L=R)')
+    ax2.plot(epochs, chance_agree, color='gray', linestyle='--', label='Chance Level (Binomial)')
+    ax2.axvline(corruption_start_epoch, color='r', linestyle=':', linewidth=2, label='Corruption Start (Epoch {})'.format(corruption_start_epoch))
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Fraction of Trials with L=R')
+    ax2.set_title('Left/Right ALM Agreement Over Training (Control Trials)')
+    ax2.set_xticks(epochs)
+    ax2.set_ylim(0.4, 1.05)
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.savefig('figs/LR_readoutacc_and_agreement_corrupted_learning_L{}_R{}_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['corruption_type']))
+    plt.show()
+
+
+
+
+
+
+if True:
 
 
     ### Plot control results over seeds ###

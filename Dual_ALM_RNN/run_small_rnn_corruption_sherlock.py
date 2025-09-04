@@ -18,8 +18,8 @@ for seed in range(10):
         exp.configs['random_seed'] = seed
         exp.configs['train_type'] = 'train_type_modular_corruption'
         exp.configs['corruption_type'] = 'gaussian'
-        exp.configs['corruption_start_epoch'] = 7?
-        exp.configs['corruption_noise'] = 1.4?
+        exp.configs['corruption_start_epoch'] = 15
+        exp.configs['corruption_noise'] = 1.4
 
         exp.train_type_modular_single_readout()
 
