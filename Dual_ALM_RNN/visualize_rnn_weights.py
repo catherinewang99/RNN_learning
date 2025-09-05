@@ -7,6 +7,7 @@ import os
 import json
 from dual_alm_rnn_models import TwoHemiRNNTanh_single_readout
 from dual_alm_rnn_exp import DualALMRNNExp
+import argparse, os, math, pickle, json
 
 plt.rcParams['pdf.fonttype'] = '42' 
 
@@ -351,6 +352,12 @@ def find_model_paths():
             model_paths.append(root)
     
     return model_paths
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--best', action='store_true', default=False)
+    parser.add_argument('--last', action='store_true', default=False)
+    return parser.parse_args()
 
 def main():
     """
@@ -381,7 +388,14 @@ def main():
     
     # Create visualization
     save_path = 'figs/rnn_L{}_R{}_weights_visualization_{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['train_type'])
-    weights = visualize_rnn_weights(model_path, configs, 'best', save_path=save_path)
+
+    args = parse_args()
+
+
+    if args.best:
+        weights = visualize_rnn_weights(model_path, configs, 'best', save_path=save_path)
+    elif args.last:
+        weights = visualize_rnn_weights(model_path, configs, 'last', save_path=save_path)
     
     # Print weight summary
     print("\nWeight Summary:")

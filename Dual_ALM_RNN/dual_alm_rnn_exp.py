@@ -1363,6 +1363,7 @@ class DualALMRNNExp(object):
                 seed=42,
                 single_readout=True,
                 corrupt=model.corrupt
+                # corrupt=False
             )
             all_val_results_dict.append(val_results)
 
@@ -2530,9 +2531,9 @@ class DualALMRNNExp(object):
 
         results = {}
 
-        def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None):
+        def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None, corrupt_state=False):
             # Get all-neuron labels for reference
-            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, single_readout=single_readout, corrupt=corrupt)
+            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, single_readout=single_readout, corrupt=corrupt_state)
             if n_control is not None and len(all_labels) > n_control:
                 indices = np.random.choice(len(all_labels), n_control, replace=False)
             else:
@@ -2541,7 +2542,7 @@ class DualALMRNNExp(object):
 
             if single_readout:
 
-                allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout, corrupt=corrupt)
+                allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout, corrupt=corrupt_state)
                 
                 readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]  # (1, n_neurons//2)
                 readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]  # (1, n_neurons//2)
@@ -2577,11 +2578,31 @@ class DualALMRNNExp(object):
                 'n_trials': len(indices)
             }
 
-        # 1. Control condition (no perturbation)
-        print("Evaluating control condition...")
+        # 1. Control condition (no perturbation) - always evaluate with corrupt=False first
+        print("Evaluating control condition (corrupt=False)...")
         model.uni_pert_trials_prob = 0
         model.left_alm_pert_prob = 0.5
-        results['control'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=n_control)
+        control_results = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=n_control, corrupt_state=False)
+        
+        # Store control results
+        results['control'] = control_results.copy()
+        
+        # If single_readout, also store control readout accuracies separately
+        if single_readout:
+            results['control']['readout_accuracy_left_control'] = control_results['readout_accuracy_left']
+            results['control']['readout_accuracy_right_control'] = control_results['readout_accuracy_right']
+        
+        # Now evaluate with the passed corrupt value (if different from False)
+        if corrupt != False:
+            print(f"Evaluating control condition (corrupt={corrupt})...")
+            corrupt_control_results = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=n_control, corrupt_state=corrupt)
+            
+            # Update results with corrupt state values
+            results['control']['readout_accuracy_left'] = corrupt_control_results['readout_accuracy_left']
+            results['control']['readout_accuracy_right'] = corrupt_control_results['readout_accuracy_right']
+            results['control']['cd_accuracy_left'] = corrupt_control_results['cd_accuracy_left']
+            results['control']['cd_accuracy_right'] = corrupt_control_results['cd_accuracy_right']
+            results['control']['n_trials_agreed'] = corrupt_control_results['n_trials_agreed']
 
         if not control_only:
             # 2. Left ALM photoinhibition
@@ -2628,6 +2649,9 @@ class DualALMRNNExp(object):
                 print(f"{condition.replace('_', ' ').title()}:")
                 print(f"  Readout Accuracy Left: {metrics['readout_accuracy_left']:.3f}")
                 print(f"  Readout Accuracy Right: {metrics['readout_accuracy_right']:.3f}")
+                if single_readout and 'readout_accuracy_left_control' in metrics:
+                    print(f"  Readout Accuracy Left Control: {metrics['readout_accuracy_left_control']:.3f}")
+                    print(f"  Readout Accuracy Right Control: {metrics['readout_accuracy_right_control']:.3f}")
                 print(f"  CD Accuracy Left: {metrics['cd_accuracy_left']:.3f}")
                 print(f"  CD Accuracy Right: {metrics['cd_accuracy_right']:.3f}")
                 print(f"  N Trials: {metrics['n_trials']}")
@@ -2640,6 +2664,9 @@ class DualALMRNNExp(object):
                 print(f"{condition.replace('_', ' ').title()}:")
                 print(f"  Readout Accuracy Left: {metrics['readout_accuracy_left']:.3f}")
                 print(f"  Readout Accuracy Right: {metrics['readout_accuracy_right']:.3f}")
+                if single_readout and 'readout_accuracy_left_control' in metrics:
+                    print(f"  Readout Accuracy Left Control: {metrics['readout_accuracy_left_control']:.3f}")
+                    print(f"  Readout Accuracy Right Control: {metrics['readout_accuracy_right_control']:.3f}")
                 print(f"  CD Accuracy Left: {metrics['cd_accuracy_left']:.3f}")
                 print(f"  CD Accuracy Right: {metrics['cd_accuracy_right']:.3f}")
                 print(f"  N Trials: {metrics['n_trials']}")
