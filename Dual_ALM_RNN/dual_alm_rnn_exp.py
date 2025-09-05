@@ -1361,7 +1361,8 @@ class DualALMRNNExp(object):
                 model_type=model_type,
                 n_control=500,
                 seed=42,
-                single_readout=True
+                single_readout=True,
+                corrupt=model.corrupt
             )
             all_val_results_dict.append(val_results)
 
@@ -1627,8 +1628,6 @@ class DualALMRNNExp(object):
 
         sub_sample: number of weights selected randomly to plot
         """
-
-        import matplotlib.pyplot as plt
         
         # Get all weight files
         weight_files = [f for f in os.listdir(self.logs_save_path) if f.startswith('weights_epoch_')]
@@ -1791,10 +1790,13 @@ class DualALMRNNExp(object):
 
         test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
         test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+        
+        # import pdb; pdb.set_trace()
+        test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
 
-        test_set = data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
+        test_loader = torch.utils.data.DataLoader(test_set, **params)
 
-        test_loader = data.DataLoader(test_set, **params)
+
         import sys
         model = getattr(sys.modules[__name__], model_type)(self.configs, \
             self.a, self.pert_begin, self.pert_end).to(device)
@@ -1807,17 +1809,104 @@ class DualALMRNNExp(object):
         model.load_state_dict(state_dict)
 
         model.return_input = True
-        for batch_idx, data in enumerate(test_loader):
-            inputs, labels  = data
+        model.symmetric_weights = True
+        
+        # Get data from the first batch
+        data_iter = iter(test_loader)
+        try:
+            inputs, labels = next(data_iter)
             inputs, labels = inputs.to(device), labels.to(device)
-            break
+        except StopIteration:
+            print("Error: No data found in test_loader")
+            return
 
-        (sensory_inputs), _, _ = model(inputs) # may need to change the input
+        left_trials_idx = np.where(labels.cpu().numpy() == 0)[0]
+        right_trials_idx = np.where(labels.cpu().numpy() == 1)[0]
+
+        sensory_inputs, _, _ = model(inputs) # may need to change the input
         left_alm_inputs, right_alm_inputs = sensory_inputs[0], sensory_inputs[1]
 
         model.corrupt = True
-        (sensory_inputs_corrupted), _, _ = model(inputs) # may need to change the input
+        sensory_inputs_corrupted, _, _ = model(inputs) # may need to change the input
         left_alm_inputs_corrupted, right_alm_inputs_corrupted = sensory_inputs_corrupted[0], sensory_inputs_corrupted[1]
+
+        # Convert to numpy for plotting
+        left_alm_inputs = left_alm_inputs.cpu().numpy()
+        right_alm_inputs = right_alm_inputs.cpu().numpy()
+        left_alm_inputs_corrupted = left_alm_inputs_corrupted.cpu().numpy()
+        right_alm_inputs_corrupted = right_alm_inputs_corrupted.cpu().numpy()
+        labels = labels.cpu().numpy()
+
+        # Create time axis
+        timepoints = np.arange(left_alm_inputs.shape[1])
+        
+        # Convert raw inputs to numpy for plotting
+        raw_inputs = inputs.cpu().numpy()
+        
+        # Create three separate plots: raw, normal, and corrupted
+        plot_data = [
+            (raw_inputs, raw_inputs),
+            (left_alm_inputs, right_alm_inputs), 
+            (left_alm_inputs_corrupted, right_alm_inputs_corrupted)
+        ]
+        plot_titles = ["Raw", "Normal", "Corrupted"]
+        
+        for plot_type, (left_inputs, right_inputs) in enumerate(plot_data):
+            
+            fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+            fig.suptitle(f'Sensory Inputs - {plot_titles[plot_type]}', fontsize=16)
+            
+            # Define colors for channels
+            colors = ['orange', 'green']
+            
+            # Plot left trials
+            for trial_idx in left_trials_idx:
+                for channel in range(left_inputs.shape[2]):  # Plot each channel separately
+                    axes[0, 0].plot(timepoints, left_inputs[trial_idx, :, channel], 
+                                   color=colors[channel], alpha=0.7, linewidth=0.8)
+                    axes[1, 0].plot(timepoints, right_inputs[trial_idx, :, channel], 
+                                   color=colors[channel], alpha=0.7, linewidth=0.8)
+            
+            # Plot right trials
+            for trial_idx in right_trials_idx:
+                for channel in range(left_inputs.shape[2]):  # Plot each channel separately
+                    axes[0, 1].plot(timepoints, left_inputs[trial_idx, :, channel], 
+                                   color=colors[channel], alpha=0.7, linewidth=0.8)
+                    axes[1, 1].plot(timepoints, right_inputs[trial_idx, :, channel], 
+                                   color=colors[channel], alpha=0.7, linewidth=0.8)
+            
+            # Set labels and titles
+            axes[0, 0].set_title('Left Hemisphere - Left Trials')
+            axes[0, 1].set_title('Left Hemisphere - Right Trials')
+            axes[1, 0].set_title('Right Hemisphere - Left Trials')
+            axes[1, 1].set_title('Right Hemisphere - Right Trials')
+            
+            # Set axis labels
+            for ax in axes.flat:
+                ax.set_xlabel('Timepoints')
+                ax.set_ylabel('Input Value')
+                ax.grid(True, alpha=0.3)
+            
+            # Add legend for channels
+            from matplotlib.lines import Line2D
+            legend_elements = [Line2D([0], [0], color='orange', label='Channel 0'),
+                              Line2D([0], [0], color='green', label='Channel 1')]
+            fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.95))
+            
+            plt.tight_layout()
+            
+            # Save the plot
+            plot_save_path = os.path.join(self.configs['plots_dir'], self.configs['model_type'], self.sub_path)
+            os.makedirs(plot_save_path, exist_ok=True)
+            
+            plot_filename = f'sensory_inputs_{plot_titles[plot_type].lower()}.png'
+            plt.savefig(os.path.join(plot_save_path, plot_filename), dpi=300, bbox_inches='tight')
+            print(f'Saved sensory input plot: {os.path.join(plot_save_path, plot_filename)}')
+            
+            plt.show()
+            plt.close()
+
+        
 
 
     def plot_single_readout(self, datatype='test'):
@@ -2398,7 +2487,7 @@ class DualALMRNNExp(object):
 
         
 
-    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False):
+    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False, corrupt=False):
         """
         Evaluate model accuracy under:
         - Control (no perturbation)
@@ -2443,7 +2532,7 @@ class DualALMRNNExp(object):
 
         def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None):
             # Get all-neuron labels for reference
-            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, single_readout=single_readout)
+            _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, single_readout=single_readout, corrupt=corrupt)
             if n_control is not None and len(all_labels) > n_control:
                 indices = np.random.choice(len(all_labels), n_control, replace=False)
             else:
@@ -2452,7 +2541,7 @@ class DualALMRNNExp(object):
 
             if single_readout:
 
-                allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout)
+                allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout, corrupt=corrupt)
                 
                 readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]  # (1, n_neurons//2)
                 readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]  # (1, n_neurons//2)

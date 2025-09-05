@@ -29,6 +29,8 @@ def parse_args():
 
     parser.add_argument('--plot_single_readout', action='store_true', default=False)
 
+    parser.add_argument('--plot_example_sensory_inputs', action='store_true', default=False)
+
     return parser.parse_args()
 
 def main():
@@ -75,6 +77,10 @@ def main():
     if args.plot_weights_changes:
         exp = DualALMRNNExp()
         exp.plot_weights_changes()
+
+    if args.plot_example_sensory_inputs:
+        exp = DualALMRNNExp()
+        exp.plot_example_sensory_inputs()
 
 
 

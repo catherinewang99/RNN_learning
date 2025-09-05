@@ -22,18 +22,27 @@ plt.rcParams['pdf.fonttype'] = '42'
 if True:
     exp = DualALMRNNExp()
 
-
-    results_dict = np.load(
-        'dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
-            exp.configs['corruption_type'],
-            exp.configs['corruption_start_epoch'],
-            float(exp.configs['corruption_noise']),
-            exp.configs['random_seed'],
-            float(exp.configs['xs_left_alm_amp']),
-            float(exp.configs['xs_right_alm_amp'])
-        ),
-        allow_pickle=True
-    )
+    if exp.configs['train_type'] == 'train_type_modular_corruption':
+        results_dict = np.load(
+            'dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+                exp.configs['corruption_type'],
+                exp.configs['corruption_start_epoch'],
+                float(exp.configs['corruption_noise']),
+                exp.configs['random_seed'],
+                float(exp.configs['xs_left_alm_amp']),
+                float(exp.configs['xs_right_alm_amp'])
+            ),
+            allow_pickle=True
+        )
+    else:
+        results_dict = np.load(
+            'dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_single_readout/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+                exp.configs['random_seed'],
+                float(exp.configs['xs_left_alm_amp']),
+                float(exp.configs['xs_right_alm_amp'])
+            ),
+            allow_pickle=True
+        )
     epochs = np.arange(1, len(results_dict) + 1)
     readout_acc_left = np.array([results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))])
     readout_acc_right = np.array([results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))])
@@ -71,7 +80,12 @@ if True:
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig('figs/LR_readoutacc_and_agreement_corrupted_learning_L{}_R{}_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], exp.configs['corruption_type']))
+    plt.savefig('figs/LR_readoutacc_and_agreement_learning_{}_L{}_R{}_epoch_{}_noise_{}0_type_{}.pdf'.format(exp.configs['train_type'], 
+                                                                                                            exp.configs['xs_left_alm_amp'], 
+                                                                                                            exp.configs['xs_right_alm_amp'], 
+                                                                                                            exp.configs['corruption_start_epoch'], 
+                                                                                                            exp.configs['corruption_noise'], 
+                                                                                                            exp.configs['corruption_type']))
     plt.show()
 
 

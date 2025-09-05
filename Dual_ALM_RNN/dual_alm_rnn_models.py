@@ -685,7 +685,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             
             corr_level = self.corruption_noise
             if self.one_hot:
-                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 0.5) # shift the mean of the gaussian to match the mean of the input
+                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian to match the mean of the input
 
             elif self.corruption_type == "poisson":
                 # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
@@ -698,10 +698,16 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             # Keep right side unchanged
             xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
 
+            # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp) # Multiply term outside of everything
+            # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
+
         else:
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
             xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
             xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+            # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm)*self.xs_left_alm_amp) # Multiply term outside of everything
+            # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
 
             # xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
             # xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
@@ -743,9 +749,13 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             if self.corrupt:
                 return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr, 
                 xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
+                # return ((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp, 
+                # (xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
             else:
                 return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm,
                 xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs
+                # return ((xs*xs_left_alm_mask + xs_noise_left_alm)*self.xs_left_alm_amp,
+                # (xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp), hs, zs
         else:
             return hs, zs
 
