@@ -60,7 +60,7 @@ def load_model_weights(model_path, model_type):
     
     # Readout weights (1x4)
     weights['readout'] = model.readout_linear.weight.data.cpu().numpy()  # (1, 4)
-    
+    print(model.readout_linear.bias.data.cpu().numpy())
     return weights, configs
 
 def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsize=(12, 12)):

@@ -1548,6 +1548,7 @@ class DualALMRNNExp(object):
 
     def val_helper(self, model, device, val_loader, loss_fct):
 
+        model.corrupt=False
         model.eval()
 
         total_loss = 0
@@ -2546,9 +2547,11 @@ class DualALMRNNExp(object):
                 
                 readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]  # (1, n_neurons//2)
                 readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]  # (1, n_neurons//2)
-                
-                left_pred_labels = allhs[:, -1, :model.n_neurons//2].dot(readout_left_weight.flatten()) >= 0
-                right_pred_labels = allhs[:, -1, model.n_neurons//2:].dot(readout_right_weight.flatten()) >= 0
+                bias = model.readout_linear.bias.data.cpu().numpy()[0]
+
+
+                left_pred_labels = allhs[:, -1, :model.n_neurons//2].dot(readout_left_weight.flatten()) + bias >= 0
+                right_pred_labels = allhs[:, -1, model.n_neurons//2:].dot(readout_right_weight.flatten()) + bias >= 0
 
                 left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
                 right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])

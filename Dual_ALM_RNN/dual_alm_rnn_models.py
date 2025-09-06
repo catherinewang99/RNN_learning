@@ -685,7 +685,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             
             corr_level = self.corruption_noise
             if self.one_hot:
-                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian to match the mean of the input
+                # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian to match the mean of the input
+                xs_noise_left_alm_corr = math.sqrt(2/self.a)*(torch.randn_like(xs)*corr_level + 0.0) # shift the mean of the gaussian to match the mean of the input
 
             elif self.corruption_type == "poisson":
                 # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
