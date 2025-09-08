@@ -18,8 +18,7 @@ plt.rcParams['pdf.fonttype'] = '42'
 
 ### Plot single examples, corrupted vs control trials###
 
-### Plot single examples, corrupted vs control and agreement###
-if True:
+if False:
     exp = DualALMRNNExp()
 
     if exp.configs['train_type'] == 'train_type_modular_corruption':
@@ -76,8 +75,9 @@ if True:
                                                                                                             exp.configs['corruption_noise'], 
                                                                                                             exp.configs['corruption_type']))
     plt.show()
+### Plot single examples, corrupted vs control and agreement###
 
-if True:
+if False:
     exp = DualALMRNNExp()
 
     if exp.configs['train_type'] == 'train_type_modular_corruption':
@@ -158,7 +158,7 @@ if True:
 
 
 
-
+# Plot all results for all seeds
 if False:
 
 
@@ -166,6 +166,8 @@ if False:
 
     exp = DualALMRNNExp()
     input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.3), (1.0,0.4), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.4,1.0), (0.3,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)] # Same as BK
+    input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.3), (1.0,0.4), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.4,1.0), (0.3,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)] # Sane as BK
+
     # input_asym = [(1.0,1.0)]
 
     # Define the range of random seeds to analyze
@@ -199,7 +201,7 @@ if False:
 
             try:
                 if exp.configs['train_type'] == 'train_type_modular_corruption':
-                    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], seed, left_amp, right_amp), allow_pickle=True)
+                    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], seed, left_amp, right_amp), allow_pickle=True)
                 elif exp.configs['train_type'] == 'train_type_modular':
                     results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_single_readout/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(seed, left_amp, right_amp), allow_pickle=True)
                 elif exp.configs['train_type'] == 'train_type_modular_symmetric':
@@ -331,3 +333,6 @@ if False:
     print(f"\n{'='*60}")
     print("All figures saved to the 'figs/' directory!")
     print(f"{'='*60}")
+
+
+# Plot asymmetry vs readout accuracy
