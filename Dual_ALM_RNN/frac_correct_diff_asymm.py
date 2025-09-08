@@ -14,7 +14,7 @@ input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.3), (1,0.4), (1,0.5), (1,1), (0.5,1)
 
 # Initialize experiment
 exp = DualALMRNNExp()
-weights_dict = np.load('small_rnn_sherlock_weights_corruption.npy', allow_pickle=True)
+weights_dict = np.load('small_rnn_sherlock_weights_corruption_0p5noise_epoch11.npy', allow_pickle=True)
 
 all_weights = []
 control_std = []
@@ -52,11 +52,36 @@ plt.xlabel('Input asymmetry')
 # plt.ylim(0, 1)
 plt.xticks([-1,0,1],[-1,0,1])
 # plt.legend()
-plt.savefig('figs/all_competition_tenseeds.pdf')
+plt.savefig('figs/all_competition_tenseeds_corruption_0p5noise_epoch11.pdf')
 plt.show()
 
 
+weights_dict_control = np.load('small_rnn_sherlock_weights.npy', allow_pickle=True)
 
+
+all_weights_control, all_weights = [], []
+control_std, control_std_control = [], []
+for asym in input_asym:
+
+    all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)])]
+    control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
+    
+    all_weights_control += [np.mean([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)])]
+    control_std_control += [np.std([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
+
+xlabels=[-1, -0.9, -0.8, -0.7, -0.6, -0.5, 0, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+# plt.plot(xlabels, all_weights, ls='--', marker='o')
+plt.errorbar(xlabels, all_weights_control, yerr=control_std_control, label='Control', color='black', ls='--')
+plt.errorbar(xlabels, all_weights, yerr=control_std, label='Control', color='red', ls='--')
+# plt.errorbar(xlabels, right_pert_acc, yerr=right_pert_std, label='Right pert', color='darkgrey')
+# plt.errorbar(xlabels, left_pert_acc, yerr=left_pert_std, label='Left pert', color='lightgrey')
+plt.ylabel('Readout weight ratio')
+plt.xlabel('Input asymmetry')
+# plt.ylim(0, 1)
+plt.xticks([-1,0,1],[-1,0,1])
+# plt.legend()
+# plt.savefig('figs/all_competition_tenseeds_corruption_0p5noise_epoch11.pdf')
+plt.show()
 
 
 
