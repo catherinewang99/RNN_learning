@@ -1428,7 +1428,7 @@ class DualALMRNNExp(object):
 
 
 
-    def track_weights(self, model, epoch, training_phase, logs_save_path):
+    def track_weights(self, model, epoch, training_phase, logs_save_path, batch_idx=None):
         """
         Track weight evolution during training
         
@@ -1450,10 +1450,30 @@ class DualALMRNNExp(object):
             weight_data[name] = weight_matrix
         
         # Save to file
-        save_path = os.path.join(logs_save_path, f'weights_epoch_{epoch}_{training_phase}.npz')
+        if batch_idx is None:
+            save_path = os.path.join(logs_save_path, f'weights_epoch_{epoch}_{training_phase}.npz')
+        else:
+            save_path = os.path.join(logs_save_path, f'weights_epoch_{epoch}_{training_phase}_{batch_idx}.npz')
         np.savez(save_path, **weight_data)
         
         print(f'Saved weights for epoch {epoch} ({training_phase})')
+
+
+
+
+    def track_gradients(self, model, epoch, training_phase, logs_save_path, batch_idx=None):
+        """
+        Track gradient evolution during training
+        """
+        gradient_data = {}
+        for name, param in model.named_parameters():
+            gradient_data[name] = param.grad.data.cpu().numpy()
+        if batch_idx is None:
+            save_path = os.path.join(logs_save_path, f'gradients_epoch_{epoch}_{training_phase}.npz')
+        else:
+            save_path = os.path.join(logs_save_path, f'gradients_epoch_{epoch}_{training_phase}_{batch_idx}.npz')
+        np.savez(save_path, **gradient_data)
+        print(f'Saved gradients for epoch {epoch} ({training_phase})')
 
 
 
@@ -1487,7 +1507,7 @@ class DualALMRNNExp(object):
             zs: (n_trials, T, 2) # 2 because we have a readout at each hemisphere, unless single readout
             '''
 
-            _, zs = model(inputs)
+            hs, zs = model(inputs)
 
 
             assert self.T == inputs.shape[1]
@@ -1532,6 +1552,8 @@ class DualALMRNNExp(object):
 
             losses.append(loss)
             scores.append(score)
+            self.track_gradients(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
+            # self.track_weights(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
 
             if (batch_idx + 1) % self.configs['log_interval'] == 0:
                 cur_time = time.time()

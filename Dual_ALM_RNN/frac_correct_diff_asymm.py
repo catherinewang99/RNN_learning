@@ -56,7 +56,7 @@ plt.savefig('figs/all_competition_tenseeds_corruption_0p5noise_epoch11.pdf')
 plt.show()
 
 
-weights_dict_control = np.load('small_rnn_sherlock_weights.npy', allow_pickle=True)
+weights_dict_control = np.load('small_rnn_sherlock_weights_epoch40.npy', allow_pickle=True)
 
 
 all_weights_control, all_weights = [], []
@@ -87,95 +87,70 @@ plt.show()
 
 
 
-all_acc_control, all_acc = [], []
-control_std, control_std_control = [], []
-
-exp = DualALMRNNExp()
-input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.3), (1.0,0.4), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.4,1.0), (0.3,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)] # Same as BK
-for asym in input_asym:
-
-    all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)])]
-    control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
-    
-    all_weights_control += [np.mean([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)])]
-    control_std_control += [np.std([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
-
-xlabels=[-1, -0.9, -0.8, -0.7, -0.6, -0.5, 0, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-# plt.plot(xlabels, all_weights, ls='--', marker='o')
-plt.errorbar(xlabels, all_acc_control, yerr=control_std_control, label='Control', color='black', ls='--')
-plt.errorbar(xlabels, all_acc, yerr=control_std, label='Corrupted', color='red', ls='--')
-# plt.errorbar(xlabels, right_pert_acc, yerr=right_pert_std, label='Right pert', color='darkgrey')
-# plt.errorbar(xlabels, left_pert_acc, yerr=left_pert_std, label='Left pert', color='lightgrey')
-plt.ylabel('Readout accuracy delta (L-R)')
-plt.xlabel('Input asymmetry')
-# plt.ylim(0, 1)
-plt.title('Corrupted vs Control RNN accuracy delta (L-R)')
-plt.xticks([-1,0,1],[-1,0,1])
-plt.legend()
-plt.savefig('figs/acc_tenseeds_corruption_0p5noise_epoch11vscontrol.pdf')
-plt.show()
 
 
 
-
-
-# New plot: readout accuracies (control trials) for each hemisphere at the final epoch, with error bars across seeds
-left_control_means, right_control_means = [], []
-left_control_sems, right_control_sems = [], []
+# New plot: difference in readout accuracies (Left - Right) on control trials at the final epoch, with error bars across seeds
+# Plot both control (train_type_modular_single_readout) and corrupted (train_type_modular_corruption) on the same axes
+diff_means = {'control': [], 'corrupted': []}
+diff_sems = {'control': [], 'corrupted': []}
 
 # Using the experiment's logging layout to locate all_val_results_dict.npy for each asymmetry and seed
 exp = DualALMRNNExp()
 input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.3), (1.0,0.4), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.4,1.0), (0.3,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)]
 
 for asym in input_asym:
-    left_vals, right_vals = [], []
+    # compute for both train types
+    diffs_per_type = {'control': [], 'corrupted': []}
     for seed in range(0, 10):
-        # Configure path for this asymmetry and seed
-        exp_local = DualALMRNNExp()
-        exp_local.configs['xs_left_alm_amp'] = asym[0]
-        exp_local.configs['xs_right_alm_amp'] = asym[1]
-        exp_local.configs['random_seed'] = seed
-        exp_local.init_sub_path(exp_local.configs['train_type'])
-        logs_path = os.path.join(exp_local.configs['logs_dir'], exp_local.configs['model_type'], exp_local.sub_path)
+        for label, train_type in [('control', 'train_type_modular_single_readout'), ('corrupted', 'train_type_modular_corruption')]:
+            exp_local = DualALMRNNExp()
+            exp_local.configs['xs_left_alm_amp'] = asym[0]
+            exp_local.configs['xs_right_alm_amp'] = asym[1]
+            exp_local.configs['random_seed'] = seed
+            exp_local.configs['train_type'] = train_type
 
-        results_path = os.path.join(logs_path, 'all_val_results_dict.npy')
-        if not os.path.exists(results_path):
-            continue
-        results_dict = np.load(results_path, allow_pickle=True)
-        if len(results_dict) == 0:
-            continue
-        final_res = results_dict[-1].item() if isinstance(results_dict[-1], dict) is False else results_dict[-1]
-        control = final_res.get('control', {})
+            exp_local.init_sub_path(exp_local.configs['train_type'])
+            logs_path = os.path.join(exp_local.configs['logs_dir'], exp_local.configs['model_type'], exp_local.sub_path)
 
-        # Prefer explicit control keys if present (single readout), else fall back to readout_accuracy_* keys
-        left_acc = control.get('readout_accuracy_left_control', control.get('readout_accuracy_left', np.nan))
-        right_acc = control.get('readout_accuracy_right_control', control.get('readout_accuracy_right', np.nan))
+            results_path = os.path.join(logs_path, 'all_val_results_dict.npy')
+            if not os.path.exists(results_path):
+                print(f"Results path {results_path} does not exist")
+                continue
+            results_dict = np.load(results_path, allow_pickle=True)
+            if len(results_dict) == 0:
+                print(f"Results dict is empty for {results_path}")
+                continue
+            final_res = results_dict[-1].item() if isinstance(results_dict[-1], dict) is False else results_dict[-1]
+            control = final_res.get('control', {})
 
-        if not np.isnan(left_acc):
-            left_vals.append(left_acc)
-        if not np.isnan(right_acc):
-            right_vals.append(right_acc)
+            # Prefer explicit control keys if present (single readout), else fall back to readout_accuracy_* keys
+            left_acc = control.get('readout_accuracy_left_control', control.get('readout_accuracy_left', np.nan))
+            right_acc = control.get('readout_accuracy_right_control', control.get('readout_accuracy_right', np.nan))
 
-    # Aggregate across seeds
-    left_control_means.append(np.mean(left_vals) if len(left_vals) else np.nan)
-    right_control_means.append(np.mean(right_vals) if len(right_vals) else np.nan)
-    left_control_sems.append(np.std(left_vals, ddof=1) / np.sqrt(len(left_vals)) if len(left_vals) > 1 else np.nan)
-    right_control_sems.append(np.std(right_vals, ddof=1) / np.sqrt(len(right_vals)) if len(right_vals) > 1 else np.nan)
+            if not np.isnan(left_acc) and not np.isnan(right_acc):
+                diffs_per_type[label].append(left_acc - right_acc)
+
+    # Aggregate across seeds for this asymmetry
+    for label in ['control', 'corrupted']:
+        vals = diffs_per_type[label]
+        diff_means[label].append(np.mean(vals) if len(vals) else np.nan)
+        diff_sems[label].append(np.std(vals, ddof=1) / np.sqrt(len(vals)) if len(vals) > 1 else np.nan)
 
 # Map asymmetries to the same xlabels used above
 xlabels=[-1, -0.9, -0.8, -0.7, -0.6, -0.5, 0, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
 plt.figure(figsize=(8,5))
-plt.errorbar(xlabels, left_control_means, yerr=left_control_sems, label='Left hemi (control)', color='tab:red', ls='-')
-plt.errorbar(xlabels, right_control_means, yerr=right_control_sems, label='Right hemi (control)', color='tab:blue', ls='-')
+plt.errorbar(xlabels, diff_means['control'], yerr=diff_sems['control'], label='Left - Right (control)', color='black', ls='-')
+plt.errorbar(xlabels, diff_means['corrupted'], yerr=diff_sems['corrupted'], label='Left - Right (corrupted)', color='red', ls='-')
 plt.xlabel('Input asymmetry')
-plt.ylabel('Readout accuracy (control, final epoch)')
-plt.ylim(0.5, 1.0)
+plt.ylabel('Readout accuracy difference (Left - Right, control, final epoch)')
 plt.xticks([-1,0,1],[-1,0,1])
+plt.axhline(0, color='gray', linestyle='--', linewidth=1)
 plt.legend()
 os.makedirs('figs', exist_ok=True)
-plt.savefig('figs/readout_control_acc_by_hemi_final_epoch.pdf', bbox_inches='tight')
-plt.savefig('figs/readout_control_acc_by_hemi_final_epoch.png', dpi=200, bbox_inches='tight')
+plt.savefig('figs/readout_control_acc_diff_by_hemi_final_epoch.pdf', bbox_inches='tight')
+# plt.savefig('figs/readout_control_acc_diff_by_hemi_final_epoch.png', dpi=200, bbox_inches='tight')
 plt.show()
 
 
