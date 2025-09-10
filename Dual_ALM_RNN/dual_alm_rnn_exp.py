@@ -1456,7 +1456,7 @@ class DualALMRNNExp(object):
             save_path = os.path.join(logs_save_path, f'weights_epoch_{epoch}_{training_phase}_{batch_idx}.npz')
         np.savez(save_path, **weight_data)
         
-        print(f'Saved weights for epoch {epoch} ({training_phase})')
+        # print(f'Saved weights for epoch {epoch} ({training_phase})')
 
 
 
@@ -1473,7 +1473,7 @@ class DualALMRNNExp(object):
         else:
             save_path = os.path.join(logs_save_path, f'gradients_epoch_{epoch}_{training_phase}_{batch_idx}.npz')
         np.savez(save_path, **gradient_data)
-        print(f'Saved gradients for epoch {epoch} ({training_phase})')
+        # print(f'Saved gradients for epoch {epoch} ({training_phase})')
 
 
 
@@ -1553,7 +1553,7 @@ class DualALMRNNExp(object):
             losses.append(loss)
             scores.append(score)
             self.track_gradients(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
-            # self.track_weights(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
+            self.track_weights(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
 
             if (batch_idx + 1) % self.configs['log_interval'] == 0:
                 cur_time = time.time()

@@ -15,6 +15,7 @@ input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.3), (1,0.4), (1,0.5), (1,1), (0.5,1)
 # Initialize experiment
 exp = DualALMRNNExp()
 weights_dict = np.load('small_rnn_corrupted_weights_0p5noise_epoch11_40epochs.npy', allow_pickle=True)
+weights_dict = np.load('small_rnn_sherlock_weights_corruption_0p7noise_epoch11.npy', allow_pickle=True)
 
 all_weights = []
 control_std = []
@@ -52,7 +53,7 @@ plt.xlabel('Input asymmetry')
 # plt.ylim(0, 1)
 plt.xticks([-1,0,1],[-1,0,1])
 # plt.legend()
-plt.savefig('figs/all_competition_tenseeds_corruption_0p5noise_epoch11.pdf')
+plt.savefig('figs/all_competition_tenseeds_corruption_0p7noise_epoch11.pdf')
 plt.show()
 
 
@@ -81,7 +82,7 @@ plt.ylim(0, 1)
 plt.title('Corrupted vs Control RNN weights')
 plt.xticks([-1,0,1],[-1,0,1])
 plt.legend()
-plt.savefig('figs/all_competition_tenseeds_corruption_0p5noise_epoch11vscontrol.pdf')
+plt.savefig('figs/all_competition_tenseeds_corruption_0p7noise_epoch11vscontrol.pdf')
 plt.show()
 
 
