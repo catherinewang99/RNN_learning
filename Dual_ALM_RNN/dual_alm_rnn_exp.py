@@ -1213,6 +1213,7 @@ class DualALMRNNExp(object):
         logs_save_path = os.path.join(self.configs['logs_dir'], model_type, self.sub_path)
 
         self.logs_save_path = logs_save_path
+        self.model_save_path = model_save_path
 
         os.makedirs(model_save_path, exist_ok=True)
         os.makedirs(logs_save_path, exist_ok=True)
@@ -1374,6 +1375,8 @@ class DualALMRNNExp(object):
                 model_save_name = 'best_model.pth'
 
                 torch.save(model.state_dict(), os.path.join(model_save_path, model_save_name))  # save model
+
+            torch.save(model.state_dict(), os.path.join(model_save_path, 'model_epoch_{}.pth'.format(epoch)))  # save model regardless
 
 
             all_epoch_train_losses.extend(train_losses)

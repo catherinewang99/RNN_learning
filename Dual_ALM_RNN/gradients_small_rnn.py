@@ -16,8 +16,45 @@ trial_type_labels = np.load('dual_alm_rnn_data/test/onehot_trial_type_labels_sim
 
 # visualize the projected gradients on a version of the model with artificial inputs
 
+# Load configs to get model parameters
+with open('dual_alm_rnn_configs.json', 'r') as f:
+    configs = json.load(f)
+
+exp = DualALMRNNExp()
 
 
+model = TwoHemiRNNTanh_single_readout(configs, exp.a, exp.pert_begin, exp.pert_end)
+
+# Load trained weights
+# if os.path.exists(os.path.join(model_path, 'last_model.pth')):
+#     checkpoint_path = os.path.join(model_path, 'last_model.pth')
+# else:
+#     checkpoint_path = os.path.join(model_path, 'best_model.pth')
+checkpoint_path = os.path.join(configs['models_dir'], configs['model_type'], exp.sub_path, 'last_model.pth')
+if not os.path.exists(checkpoint_path):
+    raise FileNotFoundError(f"Model checkpoint not found at {checkpoint_path}")
+
+state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
+model.load_state_dict(state_dict)
+# params = {'batch_size': configs['bs'], 'shuffle': True}
+# inputs = data.TensorDataset(torch.tensor(sensory_inputs), torch.tensor(trial_type_labels))
+# inputs = data.DataLoader(inputs, **params)
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # CW Mac update
+model = model.to(device)
+
+inputs = torch.tensor(sensory_inputs).to(device)
+labels = torch.tensor(trial_type_labels).to(device)
+
+model.train()
+hs, zs = model(inputs)
+
+# left_readout_gradients = model.readout_linear.weight.grad.data.cpu().numpy()[0, :model.n_neurons//2]
+# right_readout_gradients = model.readout_linear.weight.grad.data.cpu().numpy()[0, model.n_neurons//2:]
+#
+
+
+# fo
+import pdb; pdb.set_trace()
 
 
 
