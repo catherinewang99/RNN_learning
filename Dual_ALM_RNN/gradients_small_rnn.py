@@ -45,19 +45,47 @@ model = model.to(device)
 inputs = torch.tensor(sensory_inputs).to(device)
 labels = torch.tensor(trial_type_labels).to(device)
 
+left_idx = np.where(trial_type_labels == 0)[0]
+right_idx = np.where(trial_type_labels == 1)[0]
+
 model.train()
+model.corrupt = False
+
+optimizer = torch.optim.Adam(model.parameters(), lr=configs['lr'])
+
 hs, zs = model(inputs)
 
-# left_readout_gradients = model.readout_linear.weight.grad.data.cpu().numpy()[0, :model.n_neurons//2]
-# right_readout_gradients = model.readout_linear.weight.grad.data.cpu().numpy()[0, model.n_neurons//2:]
-#
+left_readout = hs[:, -1, :model.n_neurons//2]
+right_readout = hs[:, -1, model.n_neurons//2:]
+
+left_readout_weights = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]
+right_readout_weights = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]
+readout_bias = model.readout_linear.bias.data.cpu().numpy()[0]
+
+left_readout_projections = left_readout.dot(left_readout_weights.flatten()) + readout_bias 
+right_readout_projections = right_readout.dot(right_readout_weights.flatten()) + readout_bias
+
+left_readout_projections = left_readout_projections.detach().cpu().numpy()
+right_readout_projections = right_readout_projections.detach().cpu().numpy()
+
+loss_fct = nn.BCEWithLogitsLoss()
+
+loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,exp.T-exp.delay_begin))
 
 
-# fo
+loss.backward()
+optimizer.step()
+
+left_readout_gradients = model.readout_linear.weight.grad.data.cpu().numpy()[0, :model.n_neurons//2]
+right_readout_gradients = model.readout_linear.weight.grad.data.cpu().numpy()[0, model.n_neurons//2:]
+
+left_readout_projections = 2 * (1 / (1 + np.exp(-left_readout_projections))) - 1
+right_readout_projections = 2 * (1 / (1 + np.exp(-right_readout_projections))) - 1
+
+
+
+
 import pdb; pdb.set_trace()
-
-
-
 
 
 # Visualize the gradients derived from training

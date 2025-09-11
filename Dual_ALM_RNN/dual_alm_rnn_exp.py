@@ -77,7 +77,7 @@ class DualALMRNNExp(object):
         self.logs_save_path = logs_save_path
 
     def init_sub_path(self, train_type):
-        if train_type == 'train_type_modular_corruption' and not self.one_hot:
+        if 'train_type_modular_corruption' in train_type and not self.one_hot:
             self.sub_path = os.path.join(train_type, 'cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
@@ -85,7 +85,7 @@ class DualALMRNNExp(object):
                 'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
                 'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
                 'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
-        elif self.one_hot and train_type == 'train_type_modular_corruption':
+        elif self.one_hot and 'train_type_modular_corruption' in train_type:
             self.sub_path = os.path.join(train_type, 'onehot_cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
@@ -1338,7 +1338,7 @@ class DualALMRNNExp(object):
         for epoch in range(self.configs['n_epochs']):
             epoch_begin_time = time.time()
 
-            if train_type == 'train_type_modular_corruption':
+            if 'train_type_modular_corruption' in train_type:
                 if epoch >= self.configs['corruption_start_epoch']:
                     print('Adding corruption to the training data at epoch {}'.format(epoch + 1))
                     model.corrupt = True

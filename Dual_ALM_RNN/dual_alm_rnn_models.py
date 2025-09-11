@@ -340,7 +340,7 @@ class TwoHemiRNNTanh(nn.Module):
 
 
         self.corrupt=False
-        if configs['train_type'] == 'train_type_modular_corruption':
+        if 'train_type_modular_corruption' in configs['train_type']:
             self.corruption_start_epoch = configs['corruption_start_epoch']
             self.corruption_noise = configs['corruption_noise']
             self.corruption_type = configs['corruption_type']
@@ -543,7 +543,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
 
         self.rnn_cell = TwoHemiRNNCellGeneral(n_neurons=self.n_neurons, a=self.a, sigma=self.sigma_rec_noise, nonlinearity=nn.Tanh(),
-            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor)
+            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, symmetric_weights=self.symmetric_weights)
         
         self.w_xh_linear_left_alm = nn.Linear(1, self.n_neurons//2, bias=False)
         self.w_xh_linear_right_alm = nn.Linear(1, self.n_neurons-self.n_neurons//2, bias=False)
@@ -568,7 +568,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
 
         self.corrupt=False
-        if configs['train_type'] == 'train_type_modular_corruption':
+        if 'train_type_modular_corruption' in configs['train_type']:
             self.corruption_start_epoch = configs['corruption_start_epoch']
             self.corruption_noise = configs['corruption_noise']
             self.corruption_type = configs['corruption_type']
@@ -827,11 +827,12 @@ class TwoHemiRNNCellGeneral(nn.Module):
     '''
 
     def __init__(self, n_neurons=128, a=0.2, sigma=0.05, nonlinearity=nn.Tanh(), zero_init_cross_hemi=False,\
-        init_cross_hemi_rel_factor=1, bias=True):
+        init_cross_hemi_rel_factor=1, bias=True, symmetric_weights=False):
         super().__init__()
         self.n_neurons = n_neurons
         self.a = a
         self.sigma = sigma
+        self.symmetric_weights = symmetric_weights
 
         self.nonlinearity = nonlinearity
         self.zero_init_cross_hemi = zero_init_cross_hemi
@@ -849,8 +850,13 @@ class TwoHemiRNNCellGeneral(nn.Module):
         self.init_params()
 
     def init_params(self):
-        init.normal_(self.w_hh_linear_ll.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
-        init.normal_(self.w_hh_linear_rr.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+
+        if self.symmetric_weights:
+            init.normal_(self.w_hh_linear_ll.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+            self.w_hh_linear_rr.weight = self.w_hh_linear_ll.weight
+        else:
+            init.normal_(self.w_hh_linear_ll.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+            init.normal_(self.w_hh_linear_rr.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
 
         if self.zero_init_cross_hemi:
             init.constant_(self.w_hh_linear_lr.weight, 0.0)

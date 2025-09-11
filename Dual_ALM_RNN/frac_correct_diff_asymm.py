@@ -87,6 +87,7 @@ plt.show()
 
 
 
+# Plot the readout accuracy per hemipheres for both control and corrupted over asymmetries
 
 
 
@@ -95,7 +96,10 @@ plt.show()
 # Plot both control (train_type_modular_single_readout) and corrupted (train_type_modular_corruption) on the same axes
 diff_means = {'control': [], 'corrupted': []}
 diff_sems = {'control': [], 'corrupted': []}
-
+control_means = {'left': [], 'right': []}
+control_sems = {'left': [], 'right': []}
+corrupted_means = {'left': [], 'right': []}
+corrupted_sems = {'left': [], 'right': []}
 # Using the experiment's logging layout to locate all_val_results_dict.npy for each asymmetry and seed
 exp = DualALMRNNExp()
 input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.3), (1.0,0.4), (1.0,0.5), (1.0,1.0), (0.5,1.0), (0.4,1.0), (0.3,1.0), (0.2,1.0), (0.1,1.0), (0.0,1.0)]
@@ -103,13 +107,16 @@ input_asym = [(1.0,0.0), (1.0,0.1), (1.0,0.2), (1.0,0.3), (1.0,0.4), (1.0,0.5), 
 for asym in input_asym:
     # compute for both train types
     diffs_per_type = {'control': [], 'corrupted': []}
+    control_acc_per_trial_type = {'left': [], 'right': []}
+    corrupted_acc_per_trial_type = {'left': [], 'right': []}
     for seed in range(0, 10):
-        for label, train_type in [('control', 'train_type_modular_single_readout'), ('corrupted', 'train_type_modular_corruption')]:
+        for label, train_type in [('control', 'train_type_modular_symmetric'), ('corrupted', 'train_type_modular_corruption')]:
             exp_local = DualALMRNNExp()
             exp_local.configs['xs_left_alm_amp'] = asym[0]
             exp_local.configs['xs_right_alm_amp'] = asym[1]
             exp_local.configs['random_seed'] = seed
             exp_local.configs['train_type'] = train_type
+            exp_local.configs['n_epochs'] = 40
 
             exp_local.init_sub_path(exp_local.configs['train_type'])
             logs_path = os.path.join(exp_local.configs['logs_dir'], exp_local.configs['model_type'], exp_local.sub_path)
@@ -128,6 +135,13 @@ for asym in input_asym:
             # Prefer explicit control keys if present (single readout), else fall back to readout_accuracy_* keys
             left_acc = control.get('readout_accuracy_left_control', control.get('readout_accuracy_left', np.nan))
             right_acc = control.get('readout_accuracy_right_control', control.get('readout_accuracy_right', np.nan))
+            control_acc_per_trial_type['left'].append(left_acc)
+            control_acc_per_trial_type['right'].append(right_acc)
+
+            if label == 'corrupted':
+
+                corrupted_acc_per_trial_type['left'].append(left_acc)
+                corrupted_acc_per_trial_type['right'].append(right_acc)
 
             if not np.isnan(left_acc) and not np.isnan(right_acc):
                 diffs_per_type[label].append(left_acc - right_acc)
@@ -137,6 +151,14 @@ for asym in input_asym:
         vals = diffs_per_type[label]
         diff_means[label].append(np.mean(vals) if len(vals) else np.nan)
         diff_sems[label].append(np.std(vals, ddof=1) / np.sqrt(len(vals)) if len(vals) > 1 else np.nan)
+
+    for label in ['left', 'right']:
+        vals = control_acc_per_trial_type[label]
+        control_means[label].append(np.mean(vals) if len(vals) else np.nan)
+        control_sems[label].append(np.std(vals, ddof=1) / np.sqrt(len(vals)) if len(vals) > 1 else np.nan)
+        vals = corrupted_acc_per_trial_type[label]
+        corrupted_means[label].append(np.mean(vals) if len(vals) else np.nan)
+        corrupted_sems[label].append(np.std(vals, ddof=1) / np.sqrt(len(vals)) if len(vals) > 1 else np.nan)
 
 # Map asymmetries to the same xlabels used above
 xlabels=[-1, -0.9, -0.8, -0.7, -0.6, -0.5, 0, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
@@ -155,6 +177,17 @@ plt.savefig('figs/readout_control_acc_diff_by_hemi_final_epoch.pdf', bbox_inches
 plt.show()
 
 
+plt.figure(figsize=(8,5))
+plt.errorbar(xlabels, control_means['left'], yerr=control_sems['left'], label='Left (control)', color='red', ls='-', linewidth=2)
+plt.errorbar(xlabels, control_means['right'], yerr=control_sems['right'], label='Right (control)', color='blue', ls='-', linewidth=2)
+plt.errorbar(xlabels, corrupted_means['left'], yerr=corrupted_sems['left'], label='Left (corrupted)', color='pink', ls='-', linewidth=2)
+plt.errorbar(xlabels, corrupted_means['right'], yerr=corrupted_sems['right'], label='Right (corrupted)', color='lightblue', ls='-', linewidth=2)
+plt.xlabel('Input asymmetry')
+plt.ylabel('Readout accuracy')
+plt.xticks([-1,0,1],[-1,0,1])
+plt.legend()
+plt.savefig('figs/readout_acc_by_hemi_final_epoch.pdf', bbox_inches='tight')
+plt.show()
 
 
 
