@@ -110,7 +110,7 @@ for asym in input_asym:
     control_acc_per_trial_type = {'left': [], 'right': []}
     corrupted_acc_per_trial_type = {'left': [], 'right': []}
     for seed in range(0, 10):
-        for label, train_type in [('control', 'train_type_modular_symmetric'), ('corrupted', 'train_type_modular_corruption')]:
+        for label, train_type in [('control', 'train_type_modular_symmetric'), ('corrupted', 'train_type_modular_corruption_exc')]:
             exp_local = DualALMRNNExp()
             exp_local.configs['xs_left_alm_amp'] = asym[0]
             exp_local.configs['xs_right_alm_amp'] = asym[1]

@@ -3,12 +3,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 import sys
-import json
-import os
+
+import argparse, os, math, pickle, json
 
 # 1) Load your model
 from dual_alm_rnn_models import *
 from dual_alm_rnn_exp import DualALMRNNExp
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--best', action='store_true', default=False)
+    parser.add_argument('--last', action='store_true', default=False)
+    return parser.parse_args()
+
+args = parse_args()
 
 # match these to your config
 model_kwargs = {
@@ -49,9 +59,14 @@ elif configs['one_hot'] and configs['train_type'] == "train_type_modular":
 else:
     path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/{}/n_neurons_4_random_seed_{}/n_epochs_{}_n_epochs_across_hemi_{}/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(configs['train_type'], configs['random_seed'], configs['n_epochs'], configs['across_hemi_n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp'])
 
-path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular/onehot/n_neurons_4_random_seed_1/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_0.10_right_alm_amp_1.00/init_cross_hemi_rel_factor_0.20'
+# path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular/onehot/n_neurons_4_random_seed_1/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_0.10_right_alm_amp_1.00/init_cross_hemi_rel_factor_0.20'
 
-ckpt = torch.load(path + '/best_model.pth')#, map_location="cpu")
+
+if args.best:
+    ckpt = torch.load(path + '/best_model.pth')#, map_location="cpu")
+elif args.last:
+    ckpt = torch.load(path + '/last_model.pth')#, map_location="cpu")
+
 model.load_state_dict(ckpt)
 model.eval()
 
@@ -429,6 +444,7 @@ ax2.axvline(0, color="k", lw=0.5, linestyle='--')
 ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
+plt.savefig('figs/flow_field_plot_small_rnn_{}_{}_L{}_R{}.pdf'.format(configs['train_type'], configs['random_seed'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp']))
 plt.show()
 
 # Also plot the data points used to generate the readouts
