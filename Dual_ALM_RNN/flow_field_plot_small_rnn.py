@@ -51,7 +51,7 @@ device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # C
 
 model = getattr(sys.modules[__name__], "TwoHemiRNNTanh_single_readout")(configs, \
     a, pert_begin, pert_end).to(device)
-if configs['one_hot'] and configs['train_type'] == "train_type_modular_corruption":
+if configs['one_hot'] and "train_type_modular_corruption" in configs['train_type']:
     path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/{}/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_{}_n_epochs_across_hemi_{}/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(configs['train_type'], configs['corruption_type'], configs['corruption_start_epoch'], configs['corruption_noise'], configs['random_seed'], configs['n_epochs'], configs['across_hemi_n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp'])
 elif configs['one_hot'] and configs['train_type'] == "train_type_modular":
     path = '/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/{}/onehot/n_neurons_4_random_seed_{}/n_epochs_{}_n_epochs_across_hemi_{}/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/'.format(configs['train_type'], configs['random_seed'], configs['n_epochs'], configs['across_hemi_n_epochs'], configs['xs_left_alm_amp'], configs['xs_right_alm_amp'])
@@ -66,7 +66,7 @@ if args.best:
     ckpt = torch.load(path + '/best_model.pth')#, map_location="cpu")
 elif args.last:
     ckpt = torch.load(path + '/last_model.pth')#, map_location="cpu")
-
+print(f"Loading model from {path}")
 model.load_state_dict(ckpt)
 model.eval()
 

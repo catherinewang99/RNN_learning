@@ -594,6 +594,11 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             print("Matching weights for left and right ALM")
 
             self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
+        elif 'fixed_input' in self.configs['train_type']:
+            print("Fixed input weights for left and right ALM")
+            self.w_xh_linear_right_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
+            self.w_xh_linear_left_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
+            
         else:
             init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
 

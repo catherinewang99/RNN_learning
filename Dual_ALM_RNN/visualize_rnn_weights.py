@@ -84,16 +84,16 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
     
     # Define node positions
     # Sensory input layer (top) - closer together
-    sensory_y = 8.5
-    sensory_left_x = 3.5
-    sensory_right_x = 6.5
+    sensory_y = 7.5
+    sensory_left_x = 4.0
+    sensory_right_x = 6.0
     
     # Recurrent layer (middle) - single row with extra space between L and R
     recurrent_y = 5.0
     recurrent_x_positions = [1.5, 2.5, 7.5, 8.5]  # L1, L2, R1, R2
     
-    # Readout layer (bottom)
-    readout_y = 1.5
+    # Readout layer (bottom) - symmetric distance from recurrent layer
+    readout_y = 2.5
     readout_x = 5.0
     
     # Node properties
@@ -114,8 +114,8 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
     ax.add_patch(sensory_right)
     
     # Add sensory labels
-    ax.text(sensory_left_x, sensory_y, 'L', ha='center', va='center', fontsize=14, fontweight='bold')
-    ax.text(sensory_right_x, sensory_y, 'R', ha='center', va='center', fontsize=14, fontweight='bold')
+    ax.text(sensory_left_x, sensory_y, 'C0', ha='center', va='center', fontsize=14, fontweight='bold')
+    ax.text(sensory_right_x, sensory_y, 'C1', ha='center', va='center', fontsize=14, fontweight='bold')
     
     # Draw recurrent nodes
     recurrent_nodes = []

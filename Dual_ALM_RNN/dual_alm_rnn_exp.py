@@ -1287,9 +1287,13 @@ class DualALMRNNExp(object):
 
 
         for name, param in model.named_parameters():
-            if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
-                params_within_hemi.append(param)
-            elif ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
+            if 'fixed_input' in train_type:
+                if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
+                    params_within_hemi.append(param)
+            else:
+                if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
+                    params_within_hemi.append(param)
+            if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                 params_cross_hemi.append(param)
 
 
