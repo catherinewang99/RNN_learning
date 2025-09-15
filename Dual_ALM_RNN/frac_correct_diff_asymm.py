@@ -17,6 +17,7 @@ exp = DualALMRNNExp()
 weights_dict = np.load('small_rnn_corrupted_weights_0p5noise_epoch11_40epochs.npy', allow_pickle=True)
 weights_dict = np.load('small_rnn_sherlock_weights_corruption_0p7noise_epoch11.npy', allow_pickle=True)
 weights_dict = np.load('small_rnn_sherlock_weights_fixed_input.npy', allow_pickle=True)
+weights_dict = np.load('small_rnn_corrupted_weights_fixed_input_0p5noise_epoch15_40epochs.npy', allow_pickle=True)
 
 all_weights = []
 control_std = []
@@ -57,9 +58,10 @@ plt.xticks([-1,0,1],[-1,0,1])
 plt.savefig('figs/all_competition_fixed_input.pdf')
 # plt.savefig('figs/all_competition_tenseeds_corruption_0p7noise_epoch11.pdf')
 plt.show()
-breakpoint()
+# breakpoint()
 
 weights_dict_control = np.load('small_rnn_sherlock_weights_epoch40.npy', allow_pickle=True)
+weights_dict_control = np.load('small_rnn_sherlock_weights_fixed_input.npy', allow_pickle=True)
 
 
 all_weights_control, all_weights = [], []
@@ -84,9 +86,9 @@ plt.ylim(0, 1)
 plt.title('Corrupted vs Control RNN weights')
 plt.xticks([-1,0,1],[-1,0,1])
 plt.legend()
-plt.savefig('figs/all_competition_tenseeds_corruption_0p7noise_epoch11vscontrol.pdf')
+plt.savefig('figs/all_competition_tenseeds_fixed_input_corruption_0p7noise_epoch15vscontrol.pdf')
 plt.show()
-
+# breakpoint()
 
 
 # Plot the readout accuracy per hemipheres for both control and corrupted over asymmetries
@@ -112,7 +114,7 @@ for asym in input_asym:
     control_acc_per_trial_type = {'left': [], 'right': []}
     corrupted_acc_per_trial_type = {'left': [], 'right': []}
     for seed in range(0, 10):
-        for label, train_type in [('control', 'train_type_modular_symmetric'), ('corrupted', 'train_type_modular_corruption_exc')]:
+        for label, train_type in [('control', 'train_type_modular_fixed_input'), ('corrupted', 'train_type_modular_corruption_fixed_input')]:
             exp_local = DualALMRNNExp()
             exp_local.configs['xs_left_alm_amp'] = asym[0]
             exp_local.configs['xs_right_alm_amp'] = asym[1]
@@ -174,7 +176,7 @@ plt.xticks([-1,0,1],[-1,0,1])
 plt.axhline(0, color='gray', linestyle='--', linewidth=1)
 plt.legend()
 os.makedirs('figs', exist_ok=True)
-plt.savefig('figs/readout_control_acc_diff_by_hemi_final_epoch.pdf', bbox_inches='tight')
+plt.savefig('figs/readout_control_acc_diff_by_hemi_final_epoch_fixed_input.pdf', bbox_inches='tight')
 # plt.savefig('figs/readout_control_acc_diff_by_hemi_final_epoch.png', dpi=200, bbox_inches='tight')
 plt.show()
 
@@ -188,7 +190,7 @@ plt.xlabel('Input asymmetry')
 plt.ylabel('Readout accuracy')
 plt.xticks([-1,0,1],[-1,0,1])
 plt.legend()
-plt.savefig('figs/readout_acc_by_hemi_final_epoch.pdf', bbox_inches='tight')
+plt.savefig('figs/readout_acc_by_hemi_final_epoch_fixed_input.pdf', bbox_inches='tight')
 plt.show()
 
 

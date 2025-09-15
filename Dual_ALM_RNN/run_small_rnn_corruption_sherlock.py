@@ -34,14 +34,14 @@ for asym in input_asym:
         exp.configs['xs_left_alm_amp'] = asym[0]
         exp.configs['xs_right_alm_amp'] = asym[1]
         exp.configs['random_seed'] = seed
-        exp.configs['train_type'] = 'train_type_modular_corruption'
+        exp.configs['train_type'] = 'train_type_modular_corruption_fixed_input'
         exp.configs['corruption_type'] = 'gaussian'
-        exp.configs['corruption_start_epoch'] = 11
+        exp.configs['corruption_start_epoch'] = 15
         exp.configs['corruption_noise'] = 0.5
         exp.configs['n_epochs'] = 40
 
         # For each asymmetry, print the logs path for the config
-        exp.init_sub_path('train_type_modular_corruption')
+        exp.init_sub_path(exp.configs['train_type'])
         logs_path = os.path.join(exp.configs['logs_dir'], exp.configs['model_type'], exp.sub_path)
         # print(f"Input asymmetry {asym}: logs path = {logs_path}")
 
@@ -50,5 +50,5 @@ for asym in input_asym:
         all_weights.append(weights)
     weights_dict[asym] = all_weights
 print(logs_path)
-np.save('small_rnn_corrupted_weights_0p5noise_epoch11_40epochs.npy', weights_dict)
+np.save('small_rnn_corrupted_weights_fixed_input_0p5noise_epoch15_40epochs.npy', weights_dict)
     

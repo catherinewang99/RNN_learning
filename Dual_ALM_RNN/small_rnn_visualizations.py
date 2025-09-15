@@ -200,12 +200,15 @@ if True:
             exp.configs['random_seed'] = seed
 
             try:
-                if exp.configs['train_type'] == 'train_type_modular_corruption':
-                    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], seed, left_amp, right_amp), allow_pickle=True)
-                elif exp.configs['train_type'] == 'train_type_modular_single_readout':
-                    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_single_readout/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(seed, left_amp, right_amp), allow_pickle=True)
-                elif exp.configs['train_type'] == 'train_type_modular_symmetric':
-                    results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_symmetric/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(seed, left_amp, right_amp), allow_pickle=True)
+                exp.init_sub_path(exp.configs['train_type'])
+                logs_path = os.path.join(exp.configs['logs_dir'], exp.configs['model_type'], exp.sub_path)
+                results_dict = np.load(os.path.join(logs_path, 'all_val_results_dict.npy'), allow_pickle=True)
+                # if exp.configs['train_type'] == 'train_type_modular_corruption':
+                #     results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{}0/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['corruption_type'], exp.configs['corruption_start_epoch'], exp.configs['corruption_noise'], seed, left_amp, right_amp), allow_pickle=True)
+                # elif 'train_type_modular_single_readout' in exp.configs['train_type']:
+                #     results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/{}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(exp.configs['train_type'], seed, left_amp, right_amp), allow_pickle=True)
+                # elif exp.configs['train_type'] == 'train_type_modular_symmetric':
+                #     results_dict = np.load('/Users/catherinewang/Desktop/RNN/Dual_ALM_RNN/dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_symmetric/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{}0_right_alm_amp_{}0/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(seed, left_amp, right_amp), allow_pickle=True)
                 # Extract metrics for this seed
                 readout_acc_left = np.array([results_dict[i]['control']['readout_accuracy_left'] for i in range(len(results_dict))])
                 readout_acc_right = np.array([results_dict[i]['control']['readout_accuracy_right'] for i in range(len(results_dict))])
@@ -252,7 +255,7 @@ if True:
         # Get epochs (assuming all seeds have the same number of epochs)
         epochs = np.arange(1, all_readout_acc_left.shape[1] + 1)
         
-        if exp.configs['train_type'] == 'train_type_modular_corruption':
+        if 'train_type_modular_corruption' in exp.configs['train_type']:
             corruption_start_epoch = exp.configs['corruption_start_epoch']
         
         # Create figure for this asymmetry
