@@ -17,14 +17,19 @@ exp = DualALMRNNExp()
 weights_dict = np.load('small_rnn_corrupted_weights_0p5noise_epoch11_40epochs.npy', allow_pickle=True)
 weights_dict = np.load('small_rnn_sherlock_weights_corruption_0p7noise_epoch11.npy', allow_pickle=True)
 weights_dict = np.load('small_rnn_sherlock_weights_fixed_input.npy', allow_pickle=True)
-weights_dict = np.load('small_rnn_corrupted_weights_fixed_input_0p5noise_epoch15_40epochs.npy', allow_pickle=True)
+# weights_dict = np.load('small_rnn_corrupted_weights_fixed_input_0p5noise_epoch15_40epochs.npy', allow_pickle=True)
 
 all_weights = []
 control_std = []
 for asym in input_asym:
 
-    all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)])]
-    control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
+
+    all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, exp.n_neurons//2:])) for i in range(10)])]
+    control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, exp.n_neurons//2:])) for i in range(10)]) / np.sqrt(10)]
+
+
+    # all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)])]
+    # control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
 
     # all_weights = [weights_dict.item()[asym][i][0, :exp.n_neurons//2] / weights_dict.item()[asym][i][0, :] for i in range(10)]
     # for seed in range(1,10):
@@ -55,7 +60,7 @@ plt.xlabel('Input asymmetry')
 # plt.ylim(0, 1)
 plt.xticks([-1,0,1],[-1,0,1])
 # plt.legend()
-plt.savefig('figs/all_competition_fixed_input.pdf')
+# plt.savefig('figs/all_competition_fixed_input.pdf')
 # plt.savefig('figs/all_competition_tenseeds_corruption_0p7noise_epoch11.pdf')
 plt.show()
 # breakpoint()
@@ -68,11 +73,17 @@ all_weights_control, all_weights = [], []
 control_std, control_std_control = [], []
 for asym in input_asym:
 
-    all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)])]
-    control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
+    # all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)])]
+    # control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
     
-    all_weights_control += [np.mean([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)])]
-    control_std_control += [np.std([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
+    # all_weights_control += [np.mean([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)])]
+    # control_std_control += [np.std([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, :])) for i in range(10)]) / np.sqrt(10)]
+
+    all_weights += [np.mean([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, exp.n_neurons//2:])) for i in range(10)])]
+    control_std += [np.std([np.sum(np.abs(weights_dict.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict.item()[asym][i][0, exp.n_neurons//2:])) for i in range(10)]) / np.sqrt(10)]
+    
+    all_weights_control += [np.mean([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, exp.n_neurons//2:])) for i in range(10)])]
+    control_std_control += [np.std([np.sum(np.abs(weights_dict_control.item()[asym][i][0, :exp.n_neurons//2])) / np.sum(np.abs(weights_dict_control.item()[asym][i][0, exp.n_neurons//2:])) for i in range(10)]) / np.sqrt(10)]
 
 xlabels=[-1, -0.9, -0.8, -0.7, -0.6, -0.5, 0, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 # plt.plot(xlabels, all_weights, ls='--', marker='o')
@@ -86,7 +97,7 @@ plt.ylim(0, 1)
 plt.title('Corrupted vs Control RNN weights')
 plt.xticks([-1,0,1],[-1,0,1])
 plt.legend()
-plt.savefig('figs/all_competition_tenseeds_fixed_input_corruption_0p7noise_epoch15vscontrol.pdf')
+# plt.savefig('figs/all_competition_tenseeds_fixed_input_corruption_0p7noise_epoch15vscontrol.pdf')
 plt.show()
 # breakpoint()
 

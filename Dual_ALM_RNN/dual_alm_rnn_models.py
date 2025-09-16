@@ -541,7 +541,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         self.left_alm_inds = np.arange(self.n_neurons//2)
         self.right_alm_inds = np.arange(self.n_neurons//2, self.n_neurons)
 
-        self.noise = True
+        self.noise = noise
 
         self.rnn_cell = TwoHemiRNNCellGeneral(n_neurons=self.n_neurons, a=self.a, sigma=self.sigma_rec_noise, nonlinearity=nn.Tanh(),
             zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, symmetric_weights=self.symmetric_weights, noise=self.noise)

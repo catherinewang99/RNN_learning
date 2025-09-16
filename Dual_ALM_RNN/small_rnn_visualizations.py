@@ -219,6 +219,8 @@ if True:
     axs[1].grid(True)
 
     plt.tight_layout()
+    plt.savefig('figs/train_and_validation_loss_and_score_L{}_R{}_seed{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['random_seed']))
+
     plt.show()
 
 

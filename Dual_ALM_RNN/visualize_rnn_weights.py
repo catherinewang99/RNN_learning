@@ -11,7 +11,7 @@ import argparse, os, math, pickle, json
 
 plt.rcParams['pdf.fonttype'] = '42' 
 
-def load_model_weights(model_path, model_type):
+def load_model_weights(model_path, mode):
     
     """
     Load weights from a trained model
@@ -33,13 +33,20 @@ def load_model_weights(model_path, model_type):
     
     model = TwoHemiRNNTanh_single_readout(configs, a, pert_begin, pert_end)
     
-    # Load trained weights
-    # if os.path.exists(os.path.join(model_path, 'last_model.pth')):
-    #     checkpoint_path = os.path.join(model_path, 'last_model.pth')
-    # else:
-    #     checkpoint_path = os.path.join(model_path, 'best_model.pth')
-    checkpoint_path = os.path.join(model_path, model_type + '_model.pth')
-    checkpoint_path = os.path.join(model_path, 'model_epoch_13.pth')
+    # Resolve checkpoint path from mode: 'best', 'last', or 'epoch_<N>'
+    if mode == 'best':
+        checkpoint_file = 'best_model.pth'
+    elif mode == 'last':
+        checkpoint_file = 'last_model.pth'
+    elif isinstance(mode, str) and mode.startswith('epoch_'):
+        try:
+            epoch_num = int(mode.split('_', 1)[1])
+            checkpoint_file = f'model_epoch_{epoch_num}.pth'
+        except Exception:
+            checkpoint_file = 'last_model.pth'
+    else:
+        checkpoint_file = 'last_model.pth'
+    checkpoint_path = os.path.join(model_path, checkpoint_file)
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Model checkpoint not found at {checkpoint_path}")
     
@@ -75,7 +82,7 @@ def load_model_weights(model_path, model_type):
     print(f"Right hemisphere biases: {biases['right_hemi']}")
     return weights, configs, biases
 
-def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsize=(12, 12)):
+def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12, 12), show=True):
     """
     Create a comprehensive visualization of RNN weights
     
@@ -85,7 +92,7 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
         figsize: Figure size (width, height)
     """
     # Load weights and biases
-    weights, configs, biases = load_model_weights(model_path, model_type)
+    weights, configs, biases = load_model_weights(model_path, mode)
     
     # Create figure
     fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -354,13 +361,14 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
     print(f"R2 bias: {biases['right_hemi'][1]:.6f}")
     print(f"Readout bias: {biases['readout'][0]:.6f}")
     
-    plt.tight_layout()
-    
+    # Only apply layout/show if requested
     if save_path:
+        plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Visualization saved to {save_path}")
-    
-    plt.show()
+    elif show:
+        plt.tight_layout()
+        plt.show()
     
     return weights
 
@@ -378,12 +386,13 @@ def find_model_paths():
             model_paths.append(root)
     
     return model_paths
-    
+
 def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--best', action='store_true', default=False)
     parser.add_argument('--last', action='store_true', default=False)
+    parser.add_argument('--epoch', type=int, default=None, help='Use model_epoch_<N>.pth')
     return parser.parse_args()
 
 def main():
@@ -413,15 +422,26 @@ def main():
 
     print(f"Using model: {model_path}")
     
-    # Create visualization
-    save_path = 'figs/rnn_L{}_R{}_weights_visualization_{}_seed{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['train_type'], exp.configs['random_seed'])
-
+    # Parse CLI args first
     args = parse_args()
+    
+    # Create visualization
+    os.makedirs('figs', exist_ok=True)
+    mode = 'last'
+    if args.best:
+        mode = 'best'
+    elif args.epoch is not None:
+        mode = f'epoch_{args.epoch}'
+    # Filename reflects mode
+    save_path = 'figs/rnn_L{}_R{}_weights_visualization_{}_{}_seed{}.pdf'.format(
+        exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['train_type'], mode, exp.configs['random_seed'])
 
 
     if args.best:
         weights = visualize_rnn_weights(model_path, configs, 'best', save_path=save_path)
-    elif args.last:
+    elif args.epoch is not None:
+        weights = visualize_rnn_weights(model_path, configs, f'epoch_{args.epoch}', save_path=save_path)
+    else:
         weights = visualize_rnn_weights(model_path, configs, 'last', save_path=save_path)
     
     # Print weight summary

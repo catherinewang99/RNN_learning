@@ -93,6 +93,9 @@ r_trial_input = r_trial_input.reshape(1, T, 2)
 l_trial_input = torch.tensor(l_trial_input).to(device)
 r_trial_input = torch.tensor(r_trial_input).to(device)
 
+if 'corruption' in exp.configs['train_type']:
+    model.corrupt=True
+
 
 hs, _ = model(l_trial_input)
 hs_r, _ = model(r_trial_input)
@@ -142,7 +145,10 @@ if args.single:
     # plt.ylim(-1,1)
     # plt.xlim(-1,1)
     plt.legend()
-    plt.savefig('left_hemisphere_trial_trajectory_seed{}_L{}_R{}.pdf'.format(configs['random_seed'], configs['xs_left_alm_drop_p'], configs['xs_right_alm_drop_p']))
+    if 'corruption' in exp.configs['train_type']:
+        plt.savefig('left_hemisphere_trial_trajectory_seed{}_L{}_R{}_corruption.pdf'.format(configs['random_seed'], configs['xs_left_alm_drop_p'], configs['xs_right_alm_drop_p']))
+    else:
+        plt.savefig('left_hemisphere_trial_trajectory_seed{}_L{}_R{}.pdf'.format(configs['random_seed'], configs['xs_left_alm_drop_p'], configs['xs_right_alm_drop_p']))
     plt.show()
 
 
@@ -187,15 +193,19 @@ if args.single:
     # plt.ylim(-1,1)
     # plt.xlim(-1,1)
     plt.legend()
-    plt.savefig('right_hemisphere_trial_trajectory_seed{}_L{}_R{}.pdf'.format(configs['random_seed'], configs['xs_left_alm_drop_p'], configs['xs_right_alm_drop_p']))
+    if 'corruption' in exp.configs['train_type']:
+        plt.savefig('right_hemisphere_trial_trajectory_seed{}_L{}_R{}_corruption.pdf'.format(configs['random_seed'], configs['xs_left_alm_drop_p'], configs['xs_right_alm_drop_p']))
+    else:
+        plt.savefig('right_hemisphere_trial_trajectory_seed{}_L{}_R{}.pdf'.format(configs['random_seed'], configs['xs_left_alm_drop_p'], configs['xs_right_alm_drop_p']))
     plt.show()
 
 if args.all: # Plot both left and right hemisphere trajectories and accuracies and weights
 
     if 'train_type_modular_corruption' in exp.configs['train_type']:
         results_dict = np.load(
-            'dual_alm_rnn_logs/{}/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+            'dual_alm_rnn_logs/{}/{}/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
                 exp.configs['model_type'],
+                exp.configs['train_type'],
                 exp.configs['corruption_type'],
                 exp.configs['corruption_start_epoch'],
                 float(exp.configs['corruption_noise']),
@@ -232,8 +242,9 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
 
     # Build composite figure: left = weights viz; right = 2x2 subplots
     from matplotlib import gridspec
-    fig = plt.figure(figsize=(14, 7))
-    outer_gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1], wspace=0.25)
+    fig = plt.figure(figsize=(14, 7), constrained_layout=True)
+    # Use add_gridspec so constrained_layout can manage it
+    outer_gs = fig.add_gridspec(1, 2, width_ratios=[1, 1])
 
     # Left panel: weights visualization (rendered as image to preserve exact settings)
     left_ax = fig.add_subplot(outer_gs[0, 0])
@@ -241,17 +252,23 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
         # Lazy import to avoid heavy import if not needed
         from visualize_rnn_weights import visualize_rnn_weights
         model_dir = os.path.join(configs['models_dir'], configs['model_type'], exp.sub_path)
-        tmp_img_path = os.path.join('figs', 'tmp_weights_viz.png')
-        os.makedirs('figs', exist_ok=True)
+        import io
         # Temporarily suppress plt.show() inside visualize_rnn_weights
         _orig_show = plt.show
         try:
             plt.show = lambda *args, **kwargs: None
             mode_str = f'epoch_{args.epoch}' if args.epoch is not None else ('best' if args.best else 'last')
-            visualize_rnn_weights(model_dir, configs, mode_str, save_path=tmp_img_path)
+            # Render weights plot without saving to disk
+            visualize_rnn_weights(model_dir, configs, mode_str, save_path=None)
+            # Capture the weights figure into a buffer and close it
+            inner_fig = plt.gcf()
+            buf = io.BytesIO()
+            inner_fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            plt.close(inner_fig)
         finally:
             plt.show = _orig_show
-        img = plt.imread(tmp_img_path)
+        buf.seek(0)
+        img = plt.imread(buf, format='png')
         left_ax.imshow(img)
         left_ax.axis('off')
         left_ax.set_title('RNN Weights', fontsize=12)
@@ -260,12 +277,21 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
         left_ax.axis('off')
 
     # Right panel: 2x2 subplots
-    right_gs = gridspec.GridSpecFromSubplotSpec(2, 2, subplot_spec=outer_gs[0, 1], hspace=0.35, wspace=0.3)
+    right_gs = outer_gs[0, 1].subgridspec(2, 2)
 
     # Top-left: Left hemisphere trial trajectory (left vs right trials)
     ax_tl = fig.add_subplot(right_gs[0, 0])
     ax_tl.plot(hs[0, :, 0].detach().cpu().numpy(), hs[0, :, 1].detach().cpu().numpy(), color='red', marker='o', alpha=0.5, label='Left trial')
     ax_tl.plot(hs_r[0, :, 0].detach().cpu().numpy(), hs_r[0, :, 1].detach().cpu().numpy(), color='blue', marker='o', alpha=0.5, label='Right trial')
+    # Markers: start, sample begin, delay begin, end
+    ax_tl.scatter(hs[0, 0, 0].detach().cpu().numpy(), hs[0, 0, 1].detach().cpu().numpy(), c='grey', s=60, zorder=10)
+    ax_tl.scatter(hs[0, sample_begin, 0].detach().cpu().numpy(), hs[0, sample_begin, 1].detach().cpu().numpy(), c='orange', s=60, zorder=10)
+    ax_tl.scatter(hs[0, delay_begin, 0].detach().cpu().numpy(), hs[0, delay_begin, 1].detach().cpu().numpy(), c='pink', s=60, zorder=10)
+    ax_tl.scatter(hs[0, -1, 0].detach().cpu().numpy(), hs[0, -1, 1].detach().cpu().numpy(), c='black', s=60, zorder=10)
+    ax_tl.scatter(hs_r[0, 0, 0].detach().cpu().numpy(), hs_r[0, 0, 1].detach().cpu().numpy(), c='grey', s=60, zorder=10)
+    ax_tl.scatter(hs_r[0, sample_begin, 0].detach().cpu().numpy(), hs_r[0, sample_begin, 1].detach().cpu().numpy(), c='orange', s=60, zorder=10)
+    ax_tl.scatter(hs_r[0, delay_begin, 0].detach().cpu().numpy(), hs_r[0, delay_begin, 1].detach().cpu().numpy(), c='pink', s=60, zorder=10)
+    ax_tl.scatter(hs_r[0, -1, 0].detach().cpu().numpy(), hs_r[0, -1, 1].detach().cpu().numpy(), c='black', s=60, zorder=10)
     ax_tl.axhline(0, color='grey', ls='--', linewidth=1)
     ax_tl.axvline(0, color='grey', ls='--', linewidth=1)
     ax_tl.set_xlabel('Unit 1 activity')
@@ -288,6 +314,15 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
     ax_tr = fig.add_subplot(right_gs[0, 1])
     ax_tr.plot(hs[0, :, 2].detach().cpu().numpy(), hs[0, :, 3].detach().cpu().numpy(), color='red', marker='o', alpha=0.5, label='Left trial')
     ax_tr.plot(hs_r[0, :, 2].detach().cpu().numpy(), hs_r[0, :, 3].detach().cpu().numpy(), color='blue', marker='o', alpha=0.5, label='Right trial')
+    # Markers: start, sample begin, delay begin, end
+    ax_tr.scatter(hs[0, 0, 2].detach().cpu().numpy(), hs[0, 0, 3].detach().cpu().numpy(), c='grey', s=60, zorder=10)
+    ax_tr.scatter(hs[0, sample_begin, 2].detach().cpu().numpy(), hs[0, sample_begin, 3].detach().cpu().numpy(), c='orange', s=60, zorder=10)
+    ax_tr.scatter(hs[0, delay_begin, 2].detach().cpu().numpy(), hs[0, delay_begin, 3].detach().cpu().numpy(), c='pink', s=60, zorder=10)
+    ax_tr.scatter(hs[0, -1, 2].detach().cpu().numpy(), hs[0, -1, 3].detach().cpu().numpy(), c='black', s=60, zorder=10)
+    ax_tr.scatter(hs_r[0, 0, 2].detach().cpu().numpy(), hs_r[0, 0, 3].detach().cpu().numpy(), c='grey', s=60, zorder=10)
+    ax_tr.scatter(hs_r[0, sample_begin, 2].detach().cpu().numpy(), hs_r[0, sample_begin, 3].detach().cpu().numpy(), c='orange', s=60, zorder=10)
+    ax_tr.scatter(hs_r[0, delay_begin, 2].detach().cpu().numpy(), hs_r[0, delay_begin, 3].detach().cpu().numpy(), c='pink', s=60, zorder=10)
+    ax_tr.scatter(hs_r[0, -1, 2].detach().cpu().numpy(), hs_r[0, -1, 3].detach().cpu().numpy(), c='black', s=60, zorder=10)
     ax_tr.axhline(0, color='grey', ls='--', linewidth=1)
     ax_tr.axvline(0, color='grey', ls='--', linewidth=1)
     ax_tr.set_xlabel('Unit 3 activity')
@@ -329,10 +364,20 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
     ax_b.set_ylim(0.4, 1.05)
     ax_b.legend(fontsize=8, ncol=2)
 
-    plt.tight_layout()
-    out_path = os.path.join('figs', 'weights_and_trajectories_seed{}_L{}_R{}_epoch_{}.pdf'.format(
-        configs['random_seed'], float(exp.configs['xs_left_alm_amp']), float(exp.configs['xs_right_alm_amp']), args.epoch))
+    # Title showing which checkpoint is plotted
+    model_tag = f'Epoch {args.epoch}' if args.epoch is not None else ('Best model' if args.best else 'Last model')
+    fig.suptitle(f'Weights and Trajectories ({model_tag})', fontsize=14)
+
+    # With constrained_layout, no need for tight_layout
+    # Name file accordingly
+    tag_for_file = f'epoch_{args.epoch}' if args.epoch is not None else ('best' if args.best else 'last')
+    if 'corruption' in exp.configs['train_type']:
+        out_path = os.path.join('figs', 'weights_and_trajectories_seed{}_L{}_R_{}_corruption_{}.pdf'.format(
+            configs['random_seed'], int(round(float(exp.configs['xs_left_alm_amp']))), int(round(float(exp.configs['xs_right_alm_amp']))), tag_for_file))
+    else:
+        out_path = os.path.join('figs', 'weights_and_trajectories_seed{}_L{}_R_{}_{}.pdf'.format(
+            configs['random_seed'], int(round(float(exp.configs['xs_left_alm_amp']))), int(round(float(exp.configs['xs_right_alm_amp']))), tag_for_file))
     os.makedirs('figs', exist_ok=True)
-    fig.savefig(out_path, dpi=300, bbox_inches='tight')
+    fig.savefig(out_path, dpi=300)
     print(f'Saved composite figure to {out_path}')
     plt.show()
