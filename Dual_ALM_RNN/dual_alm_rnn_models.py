@@ -508,7 +508,7 @@ class TwoHemiRNNTanh(nn.Module):
 class TwoHemiRNNTanh_single_readout(nn.Module):
     # Same class as TwoHemiRNNTanh, but there is a single readout layer for both hemispheres
 
-    def __init__(self, configs, a, pert_begin, pert_end, zero_init_cross_hemi=False, return_input=False):
+    def __init__(self, configs, a, pert_begin, pert_end, zero_init_cross_hemi=False, return_input=False, noise=True):
         super().__init__()
 
         self.one_hot = configs['one_hot']
@@ -541,9 +541,10 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         self.left_alm_inds = np.arange(self.n_neurons//2)
         self.right_alm_inds = np.arange(self.n_neurons//2, self.n_neurons)
 
+        self.noise = True
 
         self.rnn_cell = TwoHemiRNNCellGeneral(n_neurons=self.n_neurons, a=self.a, sigma=self.sigma_rec_noise, nonlinearity=nn.Tanh(),
-            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, symmetric_weights=self.symmetric_weights)
+            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, symmetric_weights=self.symmetric_weights, noise=self.noise)
         
         self.w_xh_linear_left_alm = nn.Linear(1, self.n_neurons//2, bias=False)
         self.w_xh_linear_right_alm = nn.Linear(1, self.n_neurons-self.n_neurons//2, bias=False)
@@ -564,7 +565,6 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
         self.xs_left_alm_amp = configs['xs_left_alm_amp']
         self.xs_right_alm_amp = configs['xs_right_alm_amp']
-
 
 
         self.corrupt=False
@@ -700,23 +700,31 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             else:
                 xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
 
-            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
-            # Keep right side unchanged
-            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+            if self.noise:
+
+                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
+                # Keep right side unchanged
+                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+            else:
+                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
+                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
 
             # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp) # Multiply term outside of everything
             # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
 
         else:
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
-            # xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
-            # xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
 
 
-            # import pdb; pdb.set_trace()
-            # No noise test
-            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
-            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
+
+            if self.noise:
+                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+            else:
+                # No noise test
+                print("No noise")
+                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
+                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
 
             # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm)*self.xs_left_alm_amp) # Multiply term outside of everything
             # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
@@ -1102,13 +1110,13 @@ class TwoHemiRNNCellGeneral(nn.Module):
     '''
 
     def __init__(self, n_neurons=128, a=0.2, sigma=0.05, nonlinearity=nn.Tanh(), zero_init_cross_hemi=False,\
-        init_cross_hemi_rel_factor=1, bias=True, symmetric_weights=False):
+        init_cross_hemi_rel_factor=1, bias=True, symmetric_weights=False, noise=True):
         super().__init__()
         self.n_neurons = n_neurons
         self.a = a
         self.sigma = sigma
         self.symmetric_weights = symmetric_weights
-
+        self.noise = noise
         self.nonlinearity = nonlinearity
         self.zero_init_cross_hemi = zero_init_cross_hemi
         self.init_cross_hemi_rel_factor = init_cross_hemi_rel_factor
@@ -1166,8 +1174,11 @@ class TwoHemiRNNCellGeneral(nn.Module):
         Output:
         h: (n_trials, n_neurons)
         '''
-        # noise = math.sqrt(2/self.a)*self.sigma*torch.randn_like(x_injected)
-        noise = 0.0
+
+        if self.noise:
+            noise = math.sqrt(2/self.a)*self.sigma*torch.randn_like(x_injected)
+        else:
+            noise = 0.0
         if self.nonlinearity is not None:
             h = (1-self.a)*h_pre + self.a*self.nonlinearity(self.full_recurrent(h_pre) + x_injected + noise)
         else:

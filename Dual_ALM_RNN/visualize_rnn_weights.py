@@ -378,6 +378,7 @@ def find_model_paths():
             model_paths.append(root)
     
     return model_paths
+    
 def parse_args():
     parser = argparse.ArgumentParser()
 

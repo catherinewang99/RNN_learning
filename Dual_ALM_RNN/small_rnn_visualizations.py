@@ -78,7 +78,7 @@ if False:
 
 ### Plot single examples, left vs right and agreement ###
 
-if True:
+if False:
     exp = DualALMRNNExp()
 
     if 'train_type_modular_corruption' in exp.configs['train_type']:
@@ -159,6 +159,67 @@ if True:
     plt.show()
 
 
+
+
+## Plot the overall loss and overall score of the combined hemispheres over training
+if True:
+    exp = DualALMRNNExp()
+
+    if 'train_type_modular_corruption' in exp.configs['train_type']:
+
+        path = 'dual_alm_rnn_logs/{}/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+                exp.configs['model_type'],
+                exp.configs['corruption_type'],
+                exp.configs['corruption_start_epoch'],
+                float(exp.configs['corruption_noise']),
+                exp.configs['random_seed'],
+                float(exp.configs['xs_left_alm_amp']),
+                float(exp.configs['xs_right_alm_amp']))
+
+    else:
+        
+        path = 'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+                exp.configs['model_type'],
+                exp.configs['train_type'],
+                exp.configs['random_seed'],
+                float(exp.configs['xs_left_alm_amp']),
+                float(exp.configs['xs_right_alm_amp']))
+        
+
+    train_losses = np.load(os.path.join(path, 'all_epoch_train_losses.npy'), allow_pickle=True)
+    train_scores = np.load(os.path.join(path, 'all_epoch_train_scores.npy'), allow_pickle=True)
+
+    val_losses = np.load(os.path.join(path, 'all_epoch_val_losses.npy'), allow_pickle=True)
+    val_scores = np.load(os.path.join(path, 'all_epoch_val_scores.npy'), allow_pickle=True)
+
+
+    epochs = np.arange(1, len(train_losses) + 1)
+
+    fig, axs = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+
+    # Plot losses
+    # Stretch validation losses/scores to match train epochs on x-axis
+    axs[0].plot(epochs, train_losses, label='Train Loss', color='blue')
+    # Validation losses: spread over the same x range as train epochs
+    val_x = np.linspace(epochs[0], epochs[-1], len(val_losses))
+    axs[0].plot(val_x, val_losses, label='Validation Loss', color='orange', marker='o')
+    axs[0].set_ylabel('Loss')
+    axs[0].set_title('Train and Validation Loss')
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # Plot scores
+    axs[1].plot(epochs, train_scores, label='Train Score', color='green')
+    val_x_score = np.linspace(epochs[0], epochs[-1], len(val_scores))
+    axs[1].plot(val_x_score, val_scores, label='Validation Score', color='red', marker='o')
+    axs[1].set_xlabel('Epoch')
+    axs[1].set_ylabel('Score')
+    axs[1].set_title('Train and Validation Score')
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.tight_layout()
+    plt.show()
 
 
 
