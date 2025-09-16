@@ -709,8 +709,14 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
         else:
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
-            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
-            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+            # xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+            # xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+
+            # import pdb; pdb.set_trace()
+            # No noise test
+            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
+            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
 
             # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm)*self.xs_left_alm_amp) # Multiply term outside of everything
             # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
@@ -917,8 +923,8 @@ class TwoHemiRNNSigmoid_single_readout(nn.Module):
             self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
         elif 'fixed_input' in self.configs['train_type']:
             print("Fixed input weights for left and right ALM")
-            self.w_xh_linear_right_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
-            self.w_xh_linear_left_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
+            self.w_xh_linear_right_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32) # / math.sqrt(self.n_neurons)
+            self.w_xh_linear_left_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32) # / math.sqrt(self.n_neurons)
             
         else:
             init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
@@ -1160,8 +1166,8 @@ class TwoHemiRNNCellGeneral(nn.Module):
         Output:
         h: (n_trials, n_neurons)
         '''
-        noise = math.sqrt(2/self.a)*self.sigma*torch.randn_like(x_injected)
-
+        # noise = math.sqrt(2/self.a)*self.sigma*torch.randn_like(x_injected)
+        noise = 0.0
         if self.nonlinearity is not None:
             h = (1-self.a)*h_pre + self.a*self.nonlinearity(self.full_recurrent(h_pre) + x_injected + noise)
         else:

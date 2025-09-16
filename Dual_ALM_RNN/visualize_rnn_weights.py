@@ -39,6 +39,7 @@ def load_model_weights(model_path, model_type):
     # else:
     #     checkpoint_path = os.path.join(model_path, 'best_model.pth')
     checkpoint_path = os.path.join(model_path, model_type + '_model.pth')
+    checkpoint_path = os.path.join(model_path, 'model_epoch_13.pth')
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Model checkpoint not found at {checkpoint_path}")
     
@@ -60,8 +61,19 @@ def load_model_weights(model_path, model_type):
     
     # Readout weights (1x4)
     weights['readout'] = model.readout_linear.weight.data.cpu().numpy()  # (1, 4)
-    print(model.readout_linear.bias.data.cpu().numpy())
-    return weights, configs
+    
+    # Extract bias values for coloring nodes
+    biases = {}
+    biases['readout'] = model.readout_linear.bias.data.cpu().numpy()  # (1,)
+    
+    # Extract RNN cell biases for each hemisphere
+    biases['left_hemi'] = model.rnn_cell.w_hh_linear_ll.bias.data.cpu().numpy()  # (n_neurons//2,)
+    biases['right_hemi'] = model.rnn_cell.w_hh_linear_rr.bias.data.cpu().numpy()  # (n_neurons//2,)
+    
+    print(f"Readout bias: {biases['readout']}")
+    print(f"Left hemisphere biases: {biases['left_hemi']}")
+    print(f"Right hemisphere biases: {biases['right_hemi']}")
+    return weights, configs, biases
 
 def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsize=(12, 12)):
     """
@@ -72,8 +84,8 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
         save_path: Optional path to save the figure
         figsize: Figure size (width, height)
     """
-    # Load weights
-    weights, configs = load_model_weights(model_path, model_type)
+    # Load weights and biases
+    weights, configs, biases = load_model_weights(model_path, model_type)
     
     # Create figure
     fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -117,27 +129,33 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
     ax.text(sensory_left_x, sensory_y, 'C0', ha='center', va='center', fontsize=14, fontweight='bold')
     ax.text(sensory_right_x, sensory_y, 'C1', ha='center', va='center', fontsize=14, fontweight='bold')
     
-    # Draw recurrent nodes
+    # Draw recurrent nodes with bias-based coloring
     recurrent_nodes = []
     for i, x in enumerate(recurrent_x_positions):
         if i < 2:  # Left hemisphere
-            color = node_colors['recurrent_left']
             label = f'L{i+1}'
+            # Use individual RNN cell bias for coloring (red for positive, blue for negative)
+            bias_value = biases['left_hemi'][i]  # Individual bias for each left neuron
+            color = 'red' if bias_value >= 0 else 'blue'
         else:  # Right hemisphere
-            color = node_colors['recurrent_right']
             label = f'R{i-1}'
+            # Use individual RNN cell bias for coloring (red for positive, blue for negative)
+            bias_value = biases['right_hemi'][i-2]  # Individual bias for each right neuron
+            color = 'red' if bias_value >= 0 else 'blue'
         
         node = Circle((x, recurrent_y), node_radius,
-                     facecolor=color, edgecolor='black', linewidth=2)
+                     facecolor=color, edgecolor='black', linewidth=2, alpha=0.7)
         ax.add_patch(node)
         recurrent_nodes.append(node)
         
         # Add labels
         ax.text(x, recurrent_y, label, ha='center', va='center', fontsize=12, fontweight='bold')
     
-    # Draw readout node
+    # Draw readout node with bias-based coloring
+    readout_bias = biases['readout'][0]  # Single bias value for readout
+    readout_color = 'red' if readout_bias >= 0 else 'blue'
     readout_node = Circle((readout_x, readout_y), node_radius,
-                         facecolor=node_colors['readout'], edgecolor='black', linewidth=2)
+                         facecolor=readout_color, edgecolor='black', linewidth=2, alpha=0.7)
     ax.add_patch(readout_node)
     ax.text(readout_x, readout_y, 'OUT', ha='center', va='center', fontsize=12, fontweight='bold')
     
@@ -316,17 +334,25 @@ def visualize_rnn_weights(model_path, configs, model_type, save_path=None, figsi
     ax.text(ref_x_start + 0.9, ref_y - 0.3, f'{min_weight:.3f}', fontsize=9, 
             verticalalignment='center', bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.8))
     
-    # Add color legend for positive/negative
+    # Add color legend for positive/negative weights and biases
     legend_elements = [
-        plt.Line2D([0], [0], color='red', linewidth=3, label='Positive weights'),
-        plt.Line2D([0], [0], color='blue', linewidth=3, label='Negative weights')
+        plt.Line2D([0], [0], color='red', linewidth=3, label='Positive weights/bias'),
+        plt.Line2D([0], [0], color='blue', linewidth=3, label='Negative weights/bias')
     ]
     ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98))
     
     # Add thickness explanation
-    thickness_text = 'Arrow thickness ∝ |weight| (linear scale: 0.1 to 8.0)'
+    thickness_text = 'Arrow thickness ∝ |weight| (linear scale: 0.1 to 8.0)\nNode color: red=positive bias, blue=negative bias'
     ax.text(0.02, 0.08, thickness_text, transform=ax.transAxes, fontsize=9,
             verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    # Print bias values for each recurrent node
+    print("\nBias values for recurrent nodes:")
+    print(f"L1 bias: {biases['left_hemi'][0]:.6f}")
+    print(f"L2 bias: {biases['left_hemi'][1]:.6f}")
+    print(f"R1 bias: {biases['right_hemi'][0]:.6f}")
+    print(f"R2 bias: {biases['right_hemi'][1]:.6f}")
+    print(f"Readout bias: {biases['readout'][0]:.6f}")
     
     plt.tight_layout()
     
@@ -387,7 +413,7 @@ def main():
     print(f"Using model: {model_path}")
     
     # Create visualization
-    save_path = 'figs/rnn_L{}_R{}_weights_visualization_{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['train_type'])
+    save_path = 'figs/rnn_L{}_R{}_weights_visualization_{}_seed{}.pdf'.format(exp.configs['xs_left_alm_amp'], exp.configs['xs_right_alm_amp'], exp.configs['train_type'], exp.configs['random_seed'])
 
     args = parse_args()
 

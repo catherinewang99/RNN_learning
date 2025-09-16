@@ -75,14 +75,16 @@ if False:
                                                                                                             exp.configs['corruption_noise'], 
                                                                                                             exp.configs['corruption_type']))
     plt.show()
-### Plot single examples, corrupted vs control and agreement###
 
-if False:
+### Plot single examples, left vs right and agreement ###
+
+if True:
     exp = DualALMRNNExp()
 
-    if exp.configs['train_type'] == 'train_type_modular_corruption':
+    if 'train_type_modular_corruption' in exp.configs['train_type']:
         results_dict = np.load(
-            'dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+            'dual_alm_rnn_logs/{}/train_type_modular_corruption/onehot_cor_type_{}_epoch_{}_noise_{:.2f}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+                exp.configs['model_type'],
                 exp.configs['corruption_type'],
                 exp.configs['corruption_start_epoch'],
                 float(exp.configs['corruption_noise']),
@@ -94,7 +96,9 @@ if False:
         )
     else:
         results_dict = np.load(
-            'dual_alm_rnn_logs/TwoHemiRNNTanh_single_readout/train_type_modular_single_readout/n_neurons_4_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+            'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+                exp.configs['model_type'],
+                exp.configs['train_type'],
                 exp.configs['random_seed'],
                 float(exp.configs['xs_left_alm_amp']),
                 float(exp.configs['xs_right_alm_amp'])
@@ -159,7 +163,7 @@ if False:
 
 
 # Plot all results for all seeds
-if True:
+if False:
 
 
     ### Plot control results over seeds ###

@@ -1521,7 +1521,7 @@ class DualALMRNNExp(object):
             dec_begin = self.delay_begin            
 
             # use a single readout model
-            if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+            if 'single_readout' in self.configs['model_type']:
                 # For single readout, zs is (n_trials, T, 1)
                 loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))
             else:
@@ -1543,7 +1543,7 @@ class DualALMRNNExp(object):
 
             # Evaluate the score.
 
-            if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+            if 'single_readout' in self.configs['model_type']:
                 preds = (zs[:,-1,0] >= 0).long()
                 score = accuracy_score(labels.cpu().data.numpy(), preds.cpu().data.numpy())
 
@@ -1598,7 +1598,7 @@ class DualALMRNNExp(object):
                 zs: (n_trials, T, 2)
                 '''
                 _, zs = model(inputs)
-                if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+                if 'single_readout' in self.configs['model_type']:
                     # For single readout, zs is (n_trials, T, 1)
                     loss = loss_fct(zs[:,-1,0], labels.float()).item()*len(labels) # BCEWithLogitsLoss requires that the target be float between 0 and 1.
                 else:
@@ -1613,7 +1613,7 @@ class DualALMRNNExp(object):
 
                 # Evaluate the score.
 
-                if self.configs['model_type'] == 'TwoHemiRNNTanh_single_readout':
+                if 'single_readout' in self.configs['model_type']:
 
                     preds = (zs[:,-1,0] >= 0).long()
                     score = accuracy_score(labels.cpu().data.numpy(), preds.cpu().data.numpy())
