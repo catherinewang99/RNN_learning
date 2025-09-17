@@ -136,7 +136,25 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     ax.text(sensory_left_x, sensory_y, 'C0', ha='center', va='center', fontsize=14, fontweight='bold')
     ax.text(sensory_right_x, sensory_y, 'C1', ha='center', va='center', fontsize=14, fontweight='bold')
     
-    # Draw recurrent nodes with bias-based coloring
+    # Calculate bias magnitude range for alpha scaling
+    all_bias_values = np.concatenate([
+        biases['left_hemi'],
+        biases['right_hemi'], 
+        biases['readout']
+    ])
+    max_bias_magnitude = np.max(np.abs(all_bias_values))
+    min_bias_magnitude = np.min(np.abs(all_bias_values))
+    
+    # Helper function to calculate alpha based on bias magnitude
+    def get_bias_alpha(bias_value, min_mag, max_mag):
+        if max_mag == min_mag:  # All biases have same magnitude
+            return 0.7
+        # Scale alpha from 0.3 to 1.0 based on bias magnitude
+        magnitude = np.abs(bias_value)
+        alpha = 0.3 + 0.7 * (magnitude - min_mag) / (max_mag - min_mag)
+        return np.clip(alpha, 0.3, 1.0)
+    
+    # Draw recurrent nodes with bias-based coloring and alpha
     recurrent_nodes = []
     for i, x in enumerate(recurrent_x_positions):
         if i < 2:  # Left hemisphere
@@ -144,25 +162,28 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
             # Use individual RNN cell bias for coloring (red for positive, blue for negative)
             bias_value = biases['left_hemi'][i]  # Individual bias for each left neuron
             color = 'red' if bias_value >= 0 else 'blue'
+            alpha = get_bias_alpha(bias_value, min_bias_magnitude, max_bias_magnitude)
         else:  # Right hemisphere
             label = f'R{i-1}'
             # Use individual RNN cell bias for coloring (red for positive, blue for negative)
             bias_value = biases['right_hemi'][i-2]  # Individual bias for each right neuron
             color = 'red' if bias_value >= 0 else 'blue'
+            alpha = get_bias_alpha(bias_value, min_bias_magnitude, max_bias_magnitude)
         
         node = Circle((x, recurrent_y), node_radius,
-                     facecolor=color, edgecolor='black', linewidth=2, alpha=0.7)
+                     facecolor=color, edgecolor='black', linewidth=2, alpha=alpha)
         ax.add_patch(node)
         recurrent_nodes.append(node)
         
         # Add labels
         ax.text(x, recurrent_y, label, ha='center', va='center', fontsize=12, fontweight='bold')
     
-    # Draw readout node with bias-based coloring
+    # Draw readout node with bias-based coloring and alpha
     readout_bias = biases['readout'][0]  # Single bias value for readout
     readout_color = 'red' if readout_bias >= 0 else 'blue'
+    readout_alpha = get_bias_alpha(readout_bias, min_bias_magnitude, max_bias_magnitude)
     readout_node = Circle((readout_x, readout_y), node_radius,
-                         facecolor=readout_color, edgecolor='black', linewidth=2, alpha=0.7)
+                         facecolor=readout_color, edgecolor='black', linewidth=2, alpha=readout_alpha)
     ax.add_patch(readout_node)
     ax.text(readout_x, readout_y, 'OUT', ha='center', va='center', fontsize=12, fontweight='bold')
     
@@ -202,11 +223,20 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
         weights['recurrent_rl'].flatten(),
         weights['readout'].flatten()
     ])
+    # Scale input weights by amplitude coefficients for visualization
+    left_amp = configs['xs_left_alm_amp']
+    right_amp = configs['xs_right_alm_amp']
+    
+    # Create scaled input weights for visualization
+    scaled_input_left = weights['input_left'] * left_amp
+    scaled_input_right = weights['input_right'] * right_amp
+    
     # Calculate weight range for scaling (excluding intentionally zero cross-hemisphere weights)
     # Exclude w_hh_linear_lr and w_hh_linear_rl which are set to 0 by design
+    # Use scaled input weights for proper thickness calculation
     non_zero_weights = np.concatenate([
-        weights['input_left'].flatten(),
-        weights['input_right'].flatten(),
+        scaled_input_left.flatten(),
+        scaled_input_right.flatten(),
         weights['recurrent_ll'].flatten(),
         weights['recurrent_rr'].flatten(),
         # Exclude recurrent_lr and recurrent_rl (cross-hemisphere weights set to 0)
@@ -220,18 +250,19 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     # w_xh_linear_left_alm: (2, 2) - 2D input to 2 left hemisphere neurons
     # w_xh_linear_right_alm: (2, 2) - 2D input to 2 right hemisphere neurons
     # Both weight matrices take the same 2D one-hot input [left_channel, right_channel]
+    # Use pre-calculated scaled weights for proper thickness visualization
     input_connections = [
-        # Left sensory input (channel 0) to all 4 neurons
-        (sensory_left_x, sensory_y, recurrent_x_positions[0], recurrent_y, weights['input_left'][0, 0]),  # L->L1
-        (sensory_left_x, sensory_y, recurrent_x_positions[1], recurrent_y, weights['input_left'][0, 1]),  # L->L2
-        (sensory_left_x, sensory_y, recurrent_x_positions[2], recurrent_y, weights['input_right'][0, 0]),  # L->R1
-        (sensory_left_x, sensory_y, recurrent_x_positions[3], recurrent_y, weights['input_right'][0, 1]),  # L->R2
+        # Left sensory input (channel 0) to all 4 neurons - already scaled by left_amp
+        (sensory_left_x, sensory_y, recurrent_x_positions[0], recurrent_y, scaled_input_left[0, 0]),  # L->L1
+        (sensory_left_x, sensory_y, recurrent_x_positions[1], recurrent_y, scaled_input_left[0, 1]),  # L->L2
+        (sensory_left_x, sensory_y, recurrent_x_positions[2], recurrent_y, scaled_input_right[0, 0]),  # L->R1
+        (sensory_left_x, sensory_y, recurrent_x_positions[3], recurrent_y, scaled_input_right[0, 1]),  # L->R2
         
-        # Right sensory input (channel 1) to all 4 neurons
-        (sensory_right_x, sensory_y, recurrent_x_positions[0], recurrent_y, weights['input_left'][1, 0]),  # R->L1
-        (sensory_right_x, sensory_y, recurrent_x_positions[1], recurrent_y, weights['input_left'][1, 1]),  # R->L2
-        (sensory_right_x, sensory_y, recurrent_x_positions[2], recurrent_y, weights['input_right'][1, 0]),  # R->R1
-        (sensory_right_x, sensory_y, recurrent_x_positions[3], recurrent_y, weights['input_right'][1, 1]),  # R->R2
+        # Right sensory input (channel 1) to all 4 neurons - already scaled by right_amp
+        (sensory_right_x, sensory_y, recurrent_x_positions[0], recurrent_y, scaled_input_left[1, 0]),  # R->L1
+        (sensory_right_x, sensory_y, recurrent_x_positions[1], recurrent_y, scaled_input_left[1, 1]),  # R->L2
+        (sensory_right_x, sensory_y, recurrent_x_positions[2], recurrent_y, scaled_input_right[1, 0]),  # R->R1
+        (sensory_right_x, sensory_y, recurrent_x_positions[3], recurrent_y, scaled_input_right[1, 1]),  # R->R2
     ]
     
     for x1, y1, x2, y2, weight in input_connections:
@@ -349,17 +380,28 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98))
     
     # Add thickness explanation
-    thickness_text = 'Arrow thickness ∝ |weight| (linear scale: 0.1 to 8.0)\nNode color: red=positive bias, blue=negative bias'
+    thickness_text = f'Arrow thickness ∝ |weight| (linear scale: 0.1 to 8.0)\nInput weights scaled by amp: L={left_amp:.1f}, R={right_amp:.1f}\nNode color: red=positive bias, blue=negative bias\nNode alpha: darker = larger |bias|'
     ax.text(0.02, 0.08, thickness_text, transform=ax.transAxes, fontsize=9,
             verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
-    # Print bias values for each recurrent node
-    print("\nBias values for recurrent nodes:")
-    print(f"L1 bias: {biases['left_hemi'][0]:.6f}")
-    print(f"L2 bias: {biases['left_hemi'][1]:.6f}")
-    print(f"R1 bias: {biases['right_hemi'][0]:.6f}")
-    print(f"R2 bias: {biases['right_hemi'][1]:.6f}")
-    print(f"Readout bias: {biases['readout'][0]:.6f}")
+    # Print bias values and alpha for each recurrent node
+    print("\nBias values and alpha for recurrent nodes:")
+    print(f"L1 bias: {biases['left_hemi'][0]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][0], min_bias_magnitude, max_bias_magnitude):.3f}")
+    print(f"L2 bias: {biases['left_hemi'][1]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][1], min_bias_magnitude, max_bias_magnitude):.3f}")
+    print(f"R1 bias: {biases['right_hemi'][0]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][0], min_bias_magnitude, max_bias_magnitude):.3f}")
+    print(f"R2 bias: {biases['right_hemi'][1]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][1], min_bias_magnitude, max_bias_magnitude):.3f}")
+    print(f"Readout bias: {biases['readout'][0]:.6f}, alpha: {get_bias_alpha(biases['readout'][0], min_bias_magnitude, max_bias_magnitude):.3f}")
+    print(f"Bias magnitude range: {min_bias_magnitude:.6f} to {max_bias_magnitude:.6f}")
+    
+    # Print input weight scaling information
+    print(f"\nInput weight scaling:")
+    print(f"Left amplitude coefficient: {left_amp:.3f}")
+    print(f"Right amplitude coefficient: {right_amp:.3f}")
+    print(f"Original input weights (left): {weights['input_left']}")
+    print(f"Scaled input weights (left): {scaled_input_left}")
+    print(f"Original input weights (right): {weights['input_right']}")
+    print(f"Scaled input weights (right): {scaled_input_right}")
+    print(f"Weight range (scaled): {min_weight:.6f} to {max_weight:.6f}")
     
     # Only apply layout/show if requested
     if save_path:

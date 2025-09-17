@@ -1281,8 +1281,12 @@ class DualALMRNNExp(object):
         '''
 
         import sys
-        model = getattr(sys.modules[__name__], model_type)(self.configs, \
-            self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=True).to(device)
+        if 'cross_hemi' in train_type:
+            model = getattr(sys.modules[__name__], model_type)(self.configs, \
+                self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=False).to(device)
+        else:
+            model = getattr(sys.modules[__name__], model_type)(self.configs, \
+                self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=True).to(device)
 
 
 
@@ -1304,6 +1308,10 @@ class DualALMRNNExp(object):
             if 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_fixed_within_hemi.append(param)
+
+                if 'cross_hemi' in train_type: # train the cross hemi weights as well
+                    if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
+                        params_fixed_within_hemi.append(param)
 
             else:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
