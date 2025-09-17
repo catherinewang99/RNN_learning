@@ -101,6 +101,14 @@ class DualALMRNNExp(object):
                 'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
                 'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
                 'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+        elif 'asymmetric_fix' in train_type:
+            self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']), \
+                'unfix_epoch_{}'.format(self.configs['unfix_epoch']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
         else:
             self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
@@ -1285,20 +1293,29 @@ class DualALMRNNExp(object):
         params_cross_hemi = []
         n_neurons = self.configs['n_neurons']
 
+        params_fixed_within_hemi = []
+
 
         for name, param in model.named_parameters():
-            if 'fixed_input' in train_type:
+            if 'fixed_input' in train_type or 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_within_hemi.append(param)
+
+            if 'asymmetric_fix' in train_type:
+                if ('w_hh_linear_rr' in name) or ('readout_linear' in name):
+                    params_fixed_within_hemi.append(param)
+
             else:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
                     params_within_hemi.append(param)
+
             if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                 params_cross_hemi.append(param)
 
 
         optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
         optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        optimizer_fixed_within_hemi = optim.Adam(params_fixed_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
 
 
         loss_fct = nn.BCEWithLogitsLoss()
@@ -1352,7 +1369,30 @@ class DualALMRNNExp(object):
 
             model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
 
-            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch.
+
+            if 'asymmetric_fix' in train_type:
+                if epoch < self.configs['unfix_epoch']:
+                    print('Set left RNN weights at epoch {} to 0'.format(epoch + 1))
+                    model.rnn_cell.w_hh_linear_ll.weight.data = torch.tensor([
+                        [0.0, 0.0],
+                        [0.0, 0.0]], dtype=torch.float32).to(device)
+                    model.rnn_cell.w_hh_linear_ll.bias.data = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
+                    model.readout_linear.weight.data[0,:2] = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
+
+                else:
+                    print('Set the left RNN weights at epoch {} to perfect'.format(epoch + 1))
+                    model.rnn_cell.w_hh_linear_ll.weight.data = torch.tensor([
+                        [1.5, -0.3],
+                        [-0.3, 1.5]], dtype=torch.float32).to(device)
+                    model.rnn_cell.w_hh_linear_ll.bias.data = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
+                    model.readout_linear.weight.data[0,:2] = torch.tensor([-1,1], dtype=torch.float32).to(device)
+
+
+                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_fixed_within_hemi, epoch, loss_fct) # Per each training batch.
+
+
+            else:
+                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
             # total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
             # np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
               # After optimizer.step() and epoch ends
@@ -1558,8 +1598,8 @@ class DualALMRNNExp(object):
 
             losses.append(loss)
             scores.append(score)
-            self.track_gradients(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
-            self.track_weights(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
+            # self.track_gradients(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
+            # self.track_weights(model, epoch, 'within_hemi', self.logs_save_path, batch_idx=batch_idx)
 
             if (batch_idx + 1) % self.configs['log_interval'] == 0:
                 cur_time = time.time()
