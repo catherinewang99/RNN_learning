@@ -78,7 +78,7 @@ if False:
 
 ### Plot single examples, left vs right and agreement ###
 
-if False:
+if True:
     exp = DualALMRNNExp()
 
     if 'train_type_modular_corruption' in exp.configs['train_type']:
@@ -93,6 +93,17 @@ if False:
                 float(exp.configs['xs_right_alm_amp'])
             ),
             allow_pickle=True
+        )
+    elif 'asymmetric_fix' in exp.configs['train_type']:
+        results_dict = np.load(
+            'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/unfix_epoch_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+                exp.configs['model_type'],
+                exp.configs['train_type'],
+                exp.configs['random_seed'],
+                exp.configs['unfix_epoch'],
+                float(exp.configs['xs_left_alm_amp']),
+                float(exp.configs['xs_right_alm_amp'])),
+                allow_pickle=True
         )
     else:
         results_dict = np.load(
@@ -151,6 +162,12 @@ if False:
                                                                                                                 exp.configs['corruption_start_epoch'], 
                                                                                                                 exp.configs['corruption_noise'], 
                                                                                                                 exp.configs['corruption_type']))
+    elif 'asymmetric_fix' in exp.configs['train_type']:
+        plt.savefig('figs/LR_readoutacc_and_agreement_learning_{}_L{}_R{}_unfix_epoch_{}_type_{}.pdf'.format(exp.configs['train_type'], 
+                                                                                                exp.configs['xs_left_alm_amp'], 
+                                                                                                exp.configs['xs_right_alm_amp'], 
+                                                                                                exp.configs['unfix_epoch'],
+                                                                                                exp.configs['train_type']))
     else:
         plt.savefig('figs/LR_readoutacc_and_agreement_learning_{}_L{}_R{}_type_{}.pdf'.format(exp.configs['train_type'], 
                                                                                                 exp.configs['xs_left_alm_amp'], 
@@ -175,7 +192,14 @@ if True:
                 exp.configs['random_seed'],
                 float(exp.configs['xs_left_alm_amp']),
                 float(exp.configs['xs_right_alm_amp']))
-
+    elif 'asymmetric_fix' in exp.configs['train_type']:
+        path = 'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/unfix_epoch_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+                exp.configs['model_type'],
+                exp.configs['train_type'],
+                exp.configs['random_seed'],
+                exp.configs['unfix_epoch'],
+                float(exp.configs['xs_left_alm_amp']),
+                float(exp.configs['xs_right_alm_amp']))
     else:
         
         path = 'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(

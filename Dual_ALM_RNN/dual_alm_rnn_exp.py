@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
-from torch.utils import data
+from torch.utils import data  # pyright: ignore[reportMissingImports]
 from torch.utils.data import DataLoader
 import torchvision.transforms as T 
 import torch.nn as nn

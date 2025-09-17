@@ -94,6 +94,8 @@ for seed in range(10):
     l_trial_input = torch.tensor(l_trial_input).to(device)
     r_trial_input = torch.tensor(r_trial_input).to(device)
 
+    
+
     if 'corruption' in exp.configs['train_type']:
         model.corrupt=True
 
