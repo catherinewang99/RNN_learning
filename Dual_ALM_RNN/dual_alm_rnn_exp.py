@@ -1385,7 +1385,7 @@ class DualALMRNNExp(object):
                         [1.5, -0.3],
                         [-0.3, 1.5]], dtype=torch.float32).to(device)
                     model.rnn_cell.w_hh_linear_ll.bias.data = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
-                    model.readout_linear.weight.data[0,:2] = torch.tensor([-1,1], dtype=torch.float32).to(device)
+                    model.readout_linear.weight.data[0,:2] = torch.tensor([-1.5, 1.5], dtype=torch.float32).to(device)
 
 
                 train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_fixed_within_hemi, epoch, loss_fct) # Per each training batch.
