@@ -1302,11 +1302,11 @@ class DualALMRNNExp(object):
 
 
         for name, param in model.named_parameters():
-            if 'fixed_input' in train_type or 'asymmetric_fix' in train_type:
+            if 'fixed_input' in train_type: # or 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_within_hemi.append(param)
 
-            if 'asymmetric_fix' in train_type:
+            elif 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_fixed_within_hemi.append(param)
                     params_fixed_within_hemi_cross_hemi.append(param)
@@ -1323,11 +1323,13 @@ class DualALMRNNExp(object):
                 params_cross_hemi.append(param)
 
 
-        optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
-        optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
-        optimizer_fixed_within_hemi = optim.Adam(params_fixed_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
-        optimizer_fixed_within_hemi_cross_hemi = optim.Adam(params_fixed_within_hemi_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
 
+        if 'asymmetric_fix' in train_type:
+            optimizer_fixed_within_hemi = optim.Adam(params_fixed_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+            optimizer_fixed_within_hemi_cross_hemi = optim.Adam(params_fixed_within_hemi_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        else:
+            optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+            optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
 
         loss_fct = nn.BCEWithLogitsLoss()
 
