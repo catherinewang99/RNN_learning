@@ -231,15 +231,16 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     scaled_input_left = weights['input_left'] * left_amp
     scaled_input_right = weights['input_right'] * right_amp
     
-    # Calculate weight range for scaling (excluding intentionally zero cross-hemisphere weights)
-    # Exclude w_hh_linear_lr and w_hh_linear_rl which are set to 0 by design
-    # Use scaled input weights for proper thickness calculation
+    # Calculate weight range for scaling
+    # Include all weights for proper thickness calculation
+    # Cross-hemisphere weights may be non-zero depending on init_cross_hemi_rel_factor
     non_zero_weights = np.concatenate([
         scaled_input_left.flatten(),
         scaled_input_right.flatten(),
         weights['recurrent_ll'].flatten(),
         weights['recurrent_rr'].flatten(),
-        # Exclude recurrent_lr and recurrent_rl (cross-hemisphere weights set to 0)
+        weights['recurrent_lr'].flatten(),  # Include cross-hemisphere weights
+        weights['recurrent_rl'].flatten(),  # Include cross-hemisphere weights
         weights['readout'].flatten()
     ])
     
@@ -402,6 +403,13 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     print(f"Original input weights (right): {weights['input_right']}")
     print(f"Scaled input weights (right): {scaled_input_right}")
     print(f"Weight range (scaled): {min_weight:.6f} to {max_weight:.6f}")
+    
+    # Print cross-hemisphere weight information
+    print(f"\nCross-hemisphere weights:")
+    print(f"Left-to-right weights (LR): {weights['recurrent_lr']}")
+    print(f"Right-to-left weights (RL): {weights['recurrent_rl']}")
+    print(f"LR weight range: {np.min(np.abs(weights['recurrent_lr'])):.6f} to {np.max(np.abs(weights['recurrent_lr'])):.6f}")
+    print(f"RL weight range: {np.min(np.abs(weights['recurrent_rl'])):.6f} to {np.max(np.abs(weights['recurrent_rl'])):.6f}")
     
     # Only apply layout/show if requested
     if save_path:
