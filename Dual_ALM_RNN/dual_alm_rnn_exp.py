@@ -1298,6 +1298,7 @@ class DualALMRNNExp(object):
         n_neurons = self.configs['n_neurons']
 
         params_fixed_within_hemi = []
+        params_fixed_within_hemi_cross_hemi = []
 
 
         for name, param in model.named_parameters():
@@ -1308,10 +1309,11 @@ class DualALMRNNExp(object):
             if 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_fixed_within_hemi.append(param)
+                    params_fixed_within_hemi_cross_hemi.append(param)
 
                 if 'cross_hemi' in train_type: # train the cross hemi weights as well
                     if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
-                        params_fixed_within_hemi.append(param)
+                        params_fixed_within_hemi_cross_hemi.append(param)
 
             else:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
@@ -1324,6 +1326,7 @@ class DualALMRNNExp(object):
         optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
         optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
         optimizer_fixed_within_hemi = optim.Adam(params_fixed_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        optimizer_fixed_within_hemi_cross_hemi = optim.Adam(params_fixed_within_hemi_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
 
 
         loss_fct = nn.BCEWithLogitsLoss()
@@ -1386,6 +1389,8 @@ class DualALMRNNExp(object):
                         [0.0, 0.0]], dtype=torch.float32).to(device)
                     model.rnn_cell.w_hh_linear_ll.bias.data = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
                     model.readout_linear.weight.data[0,:2] = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
+                    train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_fixed_within_hemi, epoch, loss_fct) # Per each training batch.
+
 
                 else:
                     print('Set the left RNN weights at epoch {} to perfect'.format(epoch + 1))
@@ -1395,8 +1400,7 @@ class DualALMRNNExp(object):
                     model.rnn_cell.w_hh_linear_ll.bias.data = torch.tensor([0.0, 0.0], dtype=torch.float32).to(device)
                     model.readout_linear.weight.data[0,:2] = torch.tensor([-1.5, 1.5], dtype=torch.float32).to(device)
 
-
-                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_fixed_within_hemi, epoch, loss_fct) # Per each training batch.
+                    train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_fixed_within_hemi_cross_hemi, epoch, loss_fct) # Per each training batch.
 
 
             else:

@@ -179,7 +179,7 @@ if True:
 
 
 ## Plot the overall loss and overall score of the combined hemispheres over training
-if True:
+if False:
     exp = DualALMRNNExp()
 
     if 'train_type_modular_corruption' in exp.configs['train_type']:
