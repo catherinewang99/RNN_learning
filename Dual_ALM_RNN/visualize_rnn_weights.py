@@ -109,14 +109,14 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     
     # Recurrent layer (middle) - single row with extra space between L and R
     recurrent_y = 5.0
-    recurrent_x_positions = [1.5, 2.5, 7.5, 8.5]  # L1, L2, R1, R2
+    recurrent_x_positions = [1.5, 3.5, 6.5, 8.5]  # L1, L2, R1, R2
     
     # Readout layer (bottom) - symmetric distance from recurrent layer
     readout_y = 2.5
     readout_x = 5.0
     
     # Node properties
-    node_radius = 0.3
+    node_radius = 0.5
     node_colors = {
         'sensory': '#E8E8E8',  # Light gray
         'recurrent_left': '#FFE6E6',  # Light red
@@ -133,8 +133,8 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     ax.add_patch(sensory_right)
     
     # Add sensory labels
-    ax.text(sensory_left_x, sensory_y, 'C0', ha='center', va='center', fontsize=14, fontweight='bold')
-    ax.text(sensory_right_x, sensory_y, 'C1', ha='center', va='center', fontsize=14, fontweight='bold')
+    ax.text(sensory_left_x, sensory_y, 'C0', ha='center', va='center', fontsize=16, fontweight='bold')
+    ax.text(sensory_right_x, sensory_y, 'C1', ha='center', va='center', fontsize=16, fontweight='bold')
     
     # Calculate bias magnitude range for alpha scaling
     all_bias_values = np.concatenate([
@@ -176,7 +176,7 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
         recurrent_nodes.append(node)
         
         # Add labels
-        ax.text(x, recurrent_y, label, ha='center', va='center', fontsize=12, fontweight='bold')
+        ax.text(x, recurrent_y, label, ha='center', va='center', fontsize=16, fontweight='bold')
     
     # Draw readout node with bias-based coloring and alpha
     readout_bias = biases['readout'][0]  # Single bias value for readout
@@ -185,7 +185,7 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     readout_node = Circle((readout_x, readout_y), node_radius,
                          facecolor=readout_color, edgecolor='black', linewidth=2, alpha=readout_alpha)
     ax.add_patch(readout_node)
-    ax.text(readout_x, readout_y, 'OUT', ha='center', va='center', fontsize=12, fontweight='bold')
+    ax.text(readout_x, readout_y, 'OUT', ha='center', va='center', fontsize=16, fontweight='bold')
     
     # Helper function to get arrow properties
     def get_arrow_props(weight_value, max_weight=None):
@@ -205,8 +205,8 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
         else:
             # Linear scale: thickness ranges from 0.1 to 8.0
             normalized = abs_weight / max_weight
-            thickness = 0.1 + normalized * 7.9
-            thickness = max(0.1, min(8.0, thickness))  # Clamp between 0.1 and 8.0
+            thickness = 0.3 + normalized * 11.7
+            thickness = max(0.3, min(12.0, thickness))  # Clamp between 0.3 and 12.0
         
         # Color based on sign
         color = 'blue' if weight_value < 0 else 'red'
@@ -381,7 +381,7 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(12
     ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98))
     
     # Add thickness explanation
-    thickness_text = f'Arrow thickness ∝ |weight| (linear scale: 0.1 to 8.0)\nInput weights scaled by amp: L={left_amp:.1f}, R={right_amp:.1f}\nNode color: red=positive bias, blue=negative bias\nNode alpha: darker = larger |bias|'
+    thickness_text = f'Arrow thickness ∝ |weight| (linear scale: 0.3 to 12.0)\nInput weights scaled by amp: L={left_amp:.1f}, R={right_amp:.1f}\nNode color: red=positive bias, blue=negative bias\nNode alpha: darker = larger |bias|'
     ax.text(0.02, 0.08, thickness_text, transform=ax.transAxes, fontsize=9,
             verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     

@@ -8,7 +8,7 @@ import torch
 from dual_alm_rnn_exp import DualALMRNNExp
 from test_perturbation_eval import test_perturbation_evaluation
 import matplotlib.pyplot as plt
-
+plt.rcParams['pdf.fonttype'] = '42' 
 
 input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.3), (1,0.4), (1,0.5), (1,1), (0.5,1), (0.4,1), (0.3,1), (0.2,1), (0.1,1), (0,1)] # Sane as BK
 
@@ -60,7 +60,7 @@ plt.xlabel('Input asymmetry')
 # plt.ylim(0, 1)
 plt.xticks([-1,0,1],[-1,0,1])
 # plt.legend()
-# plt.savefig('figs/all_competition_fixed_input.pdf')
+plt.savefig('figs/all_competition_fixed_input.pdf')
 # plt.savefig('figs/all_competition_tenseeds_corruption_0p7noise_epoch11.pdf')
 plt.show()
 # breakpoint()

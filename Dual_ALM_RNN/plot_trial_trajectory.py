@@ -215,15 +215,16 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
             ),
             allow_pickle=True
         )
-    elif 'asymmetric_fix' in exp.configs['train_type']:
+    elif 'asymmetric_fix' in exp.configs['train_type'] or 'train_type_modular_fixed_input_cross_hemi' in exp.configs['train_type']:
         results_dict = np.load(
-            'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/unfix_epoch_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/all_val_results_dict.npy'.format(
+            'dual_alm_rnn_logs/{}/{}/n_neurons_4_random_seed_{}/unfix_epoch_{}/n_epochs_40_n_epochs_across_hemi_0/lr_3.0e-03_bs_75/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_{:.2f}/all_val_results_dict.npy'.format(
                 exp.configs['model_type'],
                 exp.configs['train_type'],
                 exp.configs['random_seed'],
                 exp.configs['unfix_epoch'],
                 float(exp.configs['xs_left_alm_amp']),
-                float(exp.configs['xs_right_alm_amp'])
+                float(exp.configs['xs_right_alm_amp']),
+                float(exp.configs['init_cross_hemi_rel_factor'])
             ),
             allow_pickle=True
         )
@@ -386,6 +387,9 @@ if args.all: # Plot both left and right hemisphere trajectories and accuracies a
     if 'corruption' in exp.configs['train_type']:
         out_path = os.path.join('figs', 'weights_and_trajectories_seed{}_L{}_R_{}_corruption_{}.pdf'.format(
             configs['random_seed'], int(round(float(exp.configs['xs_left_alm_amp']))), int(round(float(exp.configs['xs_right_alm_amp']))), tag_for_file))
+    elif 'train_type_modular_fixed_input_cross_hemi' in exp.configs['train_type'] or 'asymmetric_fix' in exp.configs['train_type']:
+        out_path = os.path.join('figs', 'weights_and_trajectories_seed{}_L{}_R_{}_unfix_epoch_{}_{}.pdf'.format(
+            configs['random_seed'], int(round(float(exp.configs['xs_left_alm_amp']))), int(round(float(exp.configs['xs_right_alm_amp']))), exp.configs['unfix_epoch'], tag_for_file))
     else:
         out_path = os.path.join('figs', 'weights_and_trajectories_seed{}_L{}_R_{}_{}.pdf'.format(
             configs['random_seed'], int(round(float(exp.configs['xs_left_alm_amp']))), int(round(float(exp.configs['xs_right_alm_amp']))), tag_for_file))

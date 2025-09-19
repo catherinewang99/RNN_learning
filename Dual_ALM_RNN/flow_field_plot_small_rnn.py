@@ -9,6 +9,7 @@ import argparse, os, math, pickle, json
 # 1) Load your model
 from dual_alm_rnn_models import *
 from dual_alm_rnn_exp import DualALMRNNExp
+plt.rcParams['pdf.fonttype'] = '42' 
 
 
 def parse_args():
