@@ -5,7 +5,7 @@
     "plots_dir": "dual_alm_rnn_plots",
     "results_dir": "dual_alm_rnn_results",
     "model_type":"TwoHemiRNNTanh_single_readout",
-    "train_type":"train_type_modular_fixed_input_cross_hemi",
+    "train_type":"train_type_asymmetric_fixed_input",
     "use_cuda":1,
     "gpu_ids":[0],
     "bs":75,
