@@ -1414,8 +1414,9 @@ class DualALMRNNExp(object):
             elif 'cross_hemi' in train_type:
                 if epoch < self.configs['unfix_epoch']:
                     print('fix the cross hemi weights to 0 at epoch {}'.format(epoch + 1))
-                    model.rnn_cell.w_hh_linear_lr.weight.data = torch.tensor([[0.0, 0.0],[0.0, 0.0]], dtype=torch.float32).to(device)
-                    model.rnn_cell.w_hh_linear_rl.weight.data = torch.tensor([[0.0, 0.0],[0.0, 0.0]], dtype=torch.float32).to(device)
+
+                    model.rnn_cell.w_hh_linear_lr.weight.data = torch.stack((torch.zeros(self.n_neurons//2),torch.zeros(self.n_neurons//2)), dim=1).to(device)
+                    model.rnn_cell.w_hh_linear_rl.weight.data = torch.stack((torch.zeros(self.n_neurons//2),torch.zeros(self.n_neurons//2)), dim=1).to(device)
                     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. 
 
                 else:

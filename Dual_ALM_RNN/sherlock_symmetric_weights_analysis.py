@@ -40,11 +40,13 @@ for unfix_epoch in [1, 11, 40]:
         state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
         model.load_state_dict(state_dict)
 
-        # get the relevant weights
+        # get the relevant weights : want to save left and right weights and biases and also cross-hemispheric weights and biases
         readout_bias = model.readout_linear.bias.data.cpu().numpy()[0]
         readout_weights = model.readout_linear.weight.data.cpu().numpy()
-        recurrent_weights = model.rnn_cell.w_hh_linear_rr.weight.data.cpu().numpy()
-        recurrent_bias = model.rnn_cell.w_hh_linear_rr.bias.data.cpu().numpy()
+        recurrent_weights_r = model.rnn_cell.w_hh_linear_rr.weight.data.cpu().numpy()
+        recurrent_bias_l = model.rnn_cell.w_hh_linear_ll.bias.data.cpu().numpy()
+        recurrent_weights_l = model.rnn_cell.w_hh_linear_ll.weight.data.cpu().numpy()
+        recurrent_bias_r = model.rnn_cell.w_hh_linear_rr.bias.data.cpu().numpy()
         print(recurrent_weights)
 
         # get learning epoch
