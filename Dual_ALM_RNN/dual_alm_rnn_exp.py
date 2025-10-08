@@ -1285,6 +1285,9 @@ class DualALMRNNExp(object):
         if 'cross_hemi' in train_type:
             model = getattr(sys.modules[__name__], model_type)(self.configs, \
                 self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=False).to(device)
+        elif 'asymmetric' in train_type and self.configs['n_neurons'] != 4:
+            model = TwoHemiRNNTanh_asymmetric_single_readout(self.configs, \
+                self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=True).to(device)
         else:
             model = getattr(sys.modules[__name__], model_type)(self.configs, \
                 self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=True).to(device)
@@ -1302,7 +1305,6 @@ class DualALMRNNExp(object):
         params_fixed_within_hemi = []
         params_fixed_within_hemi_cross_hemi = []
 
-
         for name, param in model.named_parameters():
             if 'fixed_input' in train_type:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
@@ -1312,7 +1314,7 @@ class DualALMRNNExp(object):
                     if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                         params_within_hemi_and_cross_hemi.append(param)
 
-            elif 'asymmetric_fix' in train_type:
+            if 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_fixed_within_hemi.append(param)
                     params_fixed_within_hemi_cross_hemi.append(param)
@@ -1415,8 +1417,8 @@ class DualALMRNNExp(object):
                 if epoch < self.configs['unfix_epoch']:
                     print('fix the cross hemi weights to 0 at epoch {}'.format(epoch + 1))
 
-                    model.rnn_cell.w_hh_linear_lr.weight.data = torch.stack((torch.zeros(self.n_neurons//2),torch.zeros(self.n_neurons//2)), dim=1).to(device)
-                    model.rnn_cell.w_hh_linear_rl.weight.data = torch.stack((torch.zeros(self.n_neurons//2),torch.zeros(self.n_neurons//2)), dim=1).to(device)
+                    model.rnn_cell.w_hh_linear_lr.weight.data = torch.zeros((self.n_neurons//2,self.n_neurons//2)).to(device)
+                    model.rnn_cell.w_hh_linear_rl.weight.data = torch.zeros((self.n_neurons//2,self.n_neurons//2)).to(device)
                     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. 
 
                 else:
@@ -1437,7 +1439,8 @@ class DualALMRNNExp(object):
                 n_control=500,
                 seed=42,
                 single_readout=True,
-                corrupt=model.corrupt
+                corrupt=model.corrupt,
+                asymmetric = 'asymmetric' in train_type and self.configs['n_neurons'] != 4
                 # corrupt=False
             )
             all_val_results_dict.append(val_results)
@@ -2588,7 +2591,7 @@ class DualALMRNNExp(object):
 
         
 
-    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False, corrupt=False):
+    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False, corrupt=False, asymmetric=False):
         """
         Evaluate model accuracy under:
         - Control (no perturbation)
@@ -2644,13 +2647,20 @@ class DualALMRNNExp(object):
 
                 allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout, corrupt=corrupt_state)
                 
-                readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]  # (1, n_neurons//2)
-                readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]  # (1, n_neurons//2)
+
                 bias = model.readout_linear.bias.data.cpu().numpy()[0]
 
+                if asymmetric:
+                    readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :2]  # (1, n_neurons//2)
+                    readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, 2:]  # (1, n_neurons//2)
+                    left_pred_labels = allhs[:, -1, :2].dot(readout_left_weight.flatten()) + bias >= 0
+                    right_pred_labels = allhs[:, -1, 2:].dot(readout_right_weight.flatten()) + bias >= 0
+                else:
+                    readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :model.n_neurons//2]  # (1, n_neurons//2)
+                    readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, model.n_neurons//2:]  # (1, n_neurons//2)
+                    left_pred_labels = allhs[:, -1, :model.n_neurons//2].dot(readout_left_weight.flatten()) + bias >= 0
+                    right_pred_labels = allhs[:, -1, model.n_neurons//2:].dot(readout_right_weight.flatten()) + bias >= 0
 
-                left_pred_labels = allhs[:, -1, :model.n_neurons//2].dot(readout_left_weight.flatten()) + bias >= 0
-                right_pred_labels = allhs[:, -1, model.n_neurons//2:].dot(readout_right_weight.flatten()) + bias >= 0
 
                 left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
                 right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])

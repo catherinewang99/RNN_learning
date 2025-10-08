@@ -27,6 +27,13 @@ def load_model_weights(model_path, mode):
     with open('dual_alm_rnn_configs.json', 'r') as f:
         configs = json.load(f)
     
+    # Update configs to match the model before initializing
+    configs['n_neurons'] = 256
+    configs['xs_left_alm_amp'] = 1.0
+    configs['xs_right_alm_amp'] = 1.0
+    configs['random_seed'] = 4
+    # Don't override train_type - use the original config value
+    
     # Initialize model
     a = 0.5  # t_step/tau
     pert_begin = 56  # (pert_begin_t - trial_begin_t)//t_step
@@ -86,6 +93,7 @@ def load_model_weights(model_path, mode):
     
     print(f"Selected left units: {left_selected}")
     print(f"Selected right units: {right_selected}")
+    print(f"Total selected units: {len(left_selected) + len(right_selected)}")
     
     # Extract weights
     weights = {}
@@ -146,6 +154,22 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     # Load weights and biases
     weights, configs, biases = load_model_weights(model_path, mode)
     
+    # Get the selected units from the loaded weights
+    n_neurons = configs['n_neurons']
+    n_left = n_neurons // 2
+    n_right = n_neurons - n_left
+    
+    # Define selected unit indices (first 2 and last 2 from each hemisphere)
+    if n_left >= 4:
+        left_selected = [0, 1, n_left-2, n_left-1]  # First 2 and last 2
+    else:
+        left_selected = list(range(n_left))  # All units if < 4
+        
+    if n_right >= 4:
+        right_selected = [0, 1, n_right-2, n_right-1]  # First 2 and last 2
+    else:
+        right_selected = list(range(n_right))  # All units if < 4
+    
     # Create figure with wider aspect ratio for 8 units
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     ax.set_xlim(0, 14)  # Wider to accommodate 8 units
@@ -159,10 +183,19 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     sensory_left_x = 5.0
     sensory_right_x = 9.0
     
-    # Recurrent layer (middle) - single row with 8 units
+    # Recurrent layer (middle) - dynamic positioning based on number of units
     recurrent_y = 5.0
-    # Position 8 units: L1, L2, L127, L128, R1, R2, R127, R128
-    recurrent_x_positions = [1.0, 2.5, 4.0, 5.5, 8.5, 10.0, 11.5, 13.0]
+    n_left_selected = len(left_selected)
+    n_right_selected = len(right_selected)
+    n_total_selected = n_left_selected + n_right_selected
+    
+    # Calculate positions dynamically
+    if n_total_selected <= 4:
+        # For small models (4 units or less), use compact layout
+        recurrent_x_positions = [2.0, 4.0, 8.0, 10.0][:n_total_selected]
+    else:
+        # For larger models (8 units), use the original layout
+        recurrent_x_positions = [1.0, 2.5, 4.0, 5.5, 8.5, 10.0, 11.5, 13.0]
     
     # Readout layer (bottom) - symmetric distance from recurrent layer
     readout_y = 2.5
@@ -210,7 +243,7 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     # Draw recurrent nodes with bias-based coloring and alpha
     recurrent_nodes = []
     for i, x in enumerate(recurrent_x_positions):
-        if i < 4:  # Left hemisphere (first 4 units: L1, L2, L127, L128)
+        if i < n_left_selected:  # Left hemisphere units
             if i < 2:
                 label = f'L{i+1}'  # L1, L2
             else:
@@ -219,13 +252,14 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
             bias_value = biases['left_hemi'][i]  # Individual bias for each left neuron
             color = 'red' if bias_value >= 0 else 'blue'
             alpha = get_bias_alpha(bias_value, min_bias_magnitude, max_bias_magnitude)
-        else:  # Right hemisphere (last 4 units: R1, R2, R127, R128)
-            if i < 6:
-                label = f'R{i-3}'  # R1, R2
+        else:  # Right hemisphere units
+            right_idx = i - n_left_selected
+            if right_idx < 2:
+                label = f'R{right_idx+1}'  # R1, R2
             else:
-                label = f'R{i-3+125}'  # R127, R128 (approximate for visualization)
+                label = f'R{right_idx+125}'  # R127, R128 (approximate for visualization)
             # Use individual RNN cell bias for coloring (red for positive, blue for negative)
-            bias_value = biases['right_hemi'][i-4]  # Individual bias for each right neuron
+            bias_value = biases['right_hemi'][right_idx]  # Individual bias for each right neuron
             color = 'red' if bias_value >= 0 else 'blue'
             alpha = get_bias_alpha(bias_value, min_bias_magnitude, max_bias_magnitude)
         
@@ -290,6 +324,15 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     scaled_input_left = weights['input_left'] * left_amp
     scaled_input_right = weights['input_right'] * right_amp
     
+    # Check if model type includes "cross_hemi" to determine whether to draw cross-hemispheric connections
+    model_type = configs.get('model_type', '')
+    train_type = configs.get('train_type', '')
+    has_cross_hemi = 'cross_hemi' in train_type
+    
+    print(f"Model type: {model_type}")
+    print(f"Train type: {train_type}")
+    print(f"Has cross-hemispheric connections: {has_cross_hemi}")
+    
     # Calculate weight range for scaling
     # Include all weights for proper thickness calculation
     # Cross-hemisphere weights may be non-zero depending on init_cross_hemi_rel_factor
@@ -298,40 +341,50 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
         scaled_input_right.flatten(),
         weights['recurrent_ll'].flatten(),
         weights['recurrent_rr'].flatten(),
-        weights['recurrent_lr'].flatten(),  # Include cross-hemisphere weights
-        weights['recurrent_rl'].flatten(),  # Include cross-hemisphere weights
         weights['readout'].flatten()
     ])
+    
+    # Only include cross-hemispheric weights in range calculation if they should be drawn
+    if has_cross_hemi:
+        non_zero_weights = np.concatenate([
+            non_zero_weights,
+            weights['recurrent_lr'].flatten(),  # Include cross-hemisphere weights
+            weights['recurrent_rl'].flatten(),  # Include cross-hemisphere weights
+        ])
     
     max_weight = np.max(np.abs(non_zero_weights))
     min_weight = np.min(np.abs(non_zero_weights))
     
-    # Draw input connections (16 arrows total: L/R sensory inputs to all 8 neurons)
-    # w_xh_linear_left_alm: (4, 2) - 4 selected left hemisphere neurons, 2 input channels
-    # w_xh_linear_right_alm: (4, 2) - 4 selected right hemisphere neurons, 2 input channels
+    # Draw input connections (dynamic based on number of units)
+    # w_xh_linear_left_alm: (n_left_selected, 2) - selected left hemisphere neurons, 2 input channels
+    # w_xh_linear_right_alm: (n_right_selected, 2) - selected right hemisphere neurons, 2 input channels
     # Both weight matrices take 2D one-hot input [left_channel, right_channel]
     # Use pre-calculated scaled weights for proper thickness visualization
-    input_connections = [
-        # Left sensory input (channel 0) to all 8 neurons - already scaled by left_amp
-        (sensory_left_x, sensory_y, recurrent_x_positions[0], recurrent_y, scaled_input_left[0, 0]),  # L->L1
-        (sensory_left_x, sensory_y, recurrent_x_positions[1], recurrent_y, scaled_input_left[1, 0]),  # L->L2
-        (sensory_left_x, sensory_y, recurrent_x_positions[2], recurrent_y, scaled_input_left[2, 0]),  # L->L127
-        (sensory_left_x, sensory_y, recurrent_x_positions[3], recurrent_y, scaled_input_left[3, 0]),  # L->L128
-        (sensory_left_x, sensory_y, recurrent_x_positions[4], recurrent_y, scaled_input_right[0, 0]),  # L->R1
-        (sensory_left_x, sensory_y, recurrent_x_positions[5], recurrent_y, scaled_input_right[1, 0]),  # L->R2
-        (sensory_left_x, sensory_y, recurrent_x_positions[6], recurrent_y, scaled_input_right[2, 0]),  # L->R127
-        (sensory_left_x, sensory_y, recurrent_x_positions[7], recurrent_y, scaled_input_right[3, 0]),  # L->R128
-        
-        # Right sensory input (channel 1) to all 8 neurons - already scaled by right_amp
-        (sensory_right_x, sensory_y, recurrent_x_positions[0], recurrent_y, scaled_input_left[0, 1]),  # R->L1
-        (sensory_right_x, sensory_y, recurrent_x_positions[1], recurrent_y, scaled_input_left[1, 1]),  # R->L2
-        (sensory_right_x, sensory_y, recurrent_x_positions[2], recurrent_y, scaled_input_left[2, 1]),  # R->L127
-        (sensory_right_x, sensory_y, recurrent_x_positions[3], recurrent_y, scaled_input_left[3, 1]),  # R->L128
-        (sensory_right_x, sensory_y, recurrent_x_positions[4], recurrent_y, scaled_input_right[0, 1]),  # R->R1
-        (sensory_right_x, sensory_y, recurrent_x_positions[5], recurrent_y, scaled_input_right[1, 1]),  # R->R2
-        (sensory_right_x, sensory_y, recurrent_x_positions[6], recurrent_y, scaled_input_right[2, 1]),  # R->R127
-        (sensory_right_x, sensory_y, recurrent_x_positions[7], recurrent_y, scaled_input_right[3, 1]),  # R->R128
-    ]
+    input_connections = []
+    
+    # Left sensory input (channel 0) to all units
+    for i in range(n_left_selected):
+        input_connections.append((
+            sensory_left_x, sensory_y, recurrent_x_positions[i], recurrent_y, 
+            scaled_input_left[i, 0]
+        ))
+    for i in range(n_right_selected):
+        input_connections.append((
+            sensory_left_x, sensory_y, recurrent_x_positions[i + n_left_selected], recurrent_y, 
+            scaled_input_right[i, 0]
+        ))
+    
+    # Right sensory input (channel 1) to all units
+    for i in range(n_left_selected):
+        input_connections.append((
+            sensory_right_x, sensory_y, recurrent_x_positions[i], recurrent_y, 
+            scaled_input_left[i, 1]
+        ))
+    for i in range(n_right_selected):
+        input_connections.append((
+            sensory_right_x, sensory_y, recurrent_x_positions[i + n_left_selected], recurrent_y, 
+            scaled_input_right[i, 1]
+        ))
     
     for x1, y1, x2, y2, weight in input_connections:
         thickness, color = get_arrow_props(weight, max_weight)
@@ -341,44 +394,46 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
                                   linewidth=thickness, color=color, alpha=0.8)
             ax.add_patch(arrow)
     
-    # Draw recurrent connections (64 arrows total: 8x8 matrix for each recurrent weight type)
+    # Draw recurrent connections (dynamic based on number of units)
     recurrent_connections = []
     
-    # Left-to-left connections (4x4 matrix)
-    for i in range(4):  # Left hemisphere units
-        for j in range(4):  # Left hemisphere units
+    # Left-to-left connections
+    for i in range(n_left_selected):
+        for j in range(n_left_selected):
             recurrent_connections.append((
                 recurrent_x_positions[i], recurrent_y, 
                 recurrent_x_positions[j], recurrent_y, 
                 weights['recurrent_ll'][i, j]
             ))
     
-    # Right-to-right connections (4x4 matrix)
-    for i in range(4):  # Right hemisphere units
-        for j in range(4):  # Right hemisphere units
+    # Right-to-right connections
+    for i in range(n_right_selected):
+        for j in range(n_right_selected):
             recurrent_connections.append((
-                recurrent_x_positions[i+4], recurrent_y, 
-                recurrent_x_positions[j+4], recurrent_y, 
+                recurrent_x_positions[i + n_left_selected], recurrent_y, 
+                recurrent_x_positions[j + n_left_selected], recurrent_y, 
                 weights['recurrent_rr'][i, j]
             ))
     
-    # Left-to-right connections (4x4 matrix)
-    for i in range(4):  # Left hemisphere units
-        for j in range(4):  # Right hemisphere units
-            recurrent_connections.append((
-                recurrent_x_positions[i], recurrent_y, 
-                recurrent_x_positions[j+4], recurrent_y, 
-                weights['recurrent_lr'][i, j]
-            ))
-    
-    # Right-to-left connections (4x4 matrix)
-    for i in range(4):  # Right hemisphere units
-        for j in range(4):  # Left hemisphere units
-            recurrent_connections.append((
-                recurrent_x_positions[i+4], recurrent_y, 
-                recurrent_x_positions[j], recurrent_y, 
-                weights['recurrent_rl'][i, j]
-            ))
+    # Only draw cross-hemispheric connections if the model type includes "cross_hemi"
+    if has_cross_hemi:
+        # Left-to-right connections
+        for i in range(n_left_selected):
+            for j in range(n_right_selected):
+                recurrent_connections.append((
+                    recurrent_x_positions[i], recurrent_y, 
+                    recurrent_x_positions[j + n_left_selected], recurrent_y, 
+                    weights['recurrent_lr'][i, j]
+                ))
+        
+        # Right-to-left connections
+        for i in range(n_right_selected):
+            for j in range(n_left_selected):
+                recurrent_connections.append((
+                    recurrent_x_positions[i + n_left_selected], recurrent_y, 
+                    recurrent_x_positions[j], recurrent_y, 
+                    weights['recurrent_rl'][i, j]
+                ))
     
     for x1, y1, x2, y2, weight in recurrent_connections:
         thickness, color = get_arrow_props(weight, max_weight)
@@ -402,17 +457,14 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
                                       linewidth=thickness, color=color, alpha=0.8)
             ax.add_patch(arrow)
     
-    # Draw readout connections (8 arrows: each recurrent unit to readout)
-    readout_connections = [
-        (recurrent_x_positions[0], recurrent_y, readout_x, readout_y, weights['readout'][0, 0]),  # L1->OUT
-        (recurrent_x_positions[1], recurrent_y, readout_x, readout_y, weights['readout'][0, 1]),  # L2->OUT
-        (recurrent_x_positions[2], recurrent_y, readout_x, readout_y, weights['readout'][0, 2]),  # L127->OUT
-        (recurrent_x_positions[3], recurrent_y, readout_x, readout_y, weights['readout'][0, 3]),  # L128->OUT
-        (recurrent_x_positions[4], recurrent_y, readout_x, readout_y, weights['readout'][0, 4]),  # R1->OUT
-        (recurrent_x_positions[5], recurrent_y, readout_x, readout_y, weights['readout'][0, 5]),  # R2->OUT
-        (recurrent_x_positions[6], recurrent_y, readout_x, readout_y, weights['readout'][0, 6]),  # R127->OUT
-        (recurrent_x_positions[7], recurrent_y, readout_x, readout_y, weights['readout'][0, 7]),  # R128->OUT
-    ]
+    # Draw readout connections (dynamic based on number of units)
+    readout_connections = []
+    for i in range(n_total_selected):
+        readout_connections.append((
+            recurrent_x_positions[i], recurrent_y, 
+            readout_x, readout_y, 
+            weights['readout'][0, i]
+        ))
     
     for x1, y1, x2, y2, weight in readout_connections:
         thickness, color = get_arrow_props(weight, max_weight)
@@ -424,7 +476,8 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     
 
     # Add title
-    ax.text(7, 9.5, 'Large RNN Weight Visualization (First/Last Units): L={}, R={}'.format(configs['xs_left_alm_amp'], configs['xs_right_alm_amp']), ha='center', va='center', 
+    cross_hemi_text = " (with cross-hemi)" if has_cross_hemi else " (no cross-hemi)"
+    ax.text(7, 9.5, f'Large RNN Weight Visualization{cross_hemi_text}: L={configs["xs_left_alm_amp"]}, R={configs["xs_right_alm_amp"]}', ha='center', va='center', 
             fontsize=16, fontweight='bold')
     
     # Add reference arrows showing thickest and thinnest weights
@@ -464,20 +517,17 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98))
     
     # Add thickness explanation
-    thickness_text = f'Arrow thickness ∝ |weight| (linear scale: 0.3 to 12.0)\nInput weights scaled by amp: L={left_amp:.1f}, R={right_amp:.1f}\nNode color: red=positive bias, blue=negative bias\nNode alpha: darker = larger |bias|\nShows first 2 and last 2 units from each hemisphere'
+    cross_hemi_note = "\nCross-hemispheric connections: shown" if has_cross_hemi else "\nCross-hemispheric connections: not shown"
+    thickness_text = f'Arrow thickness ∝ |weight| (linear scale: 0.3 to 12.0)\nInput weights scaled by amp: L={left_amp:.1f}, R={right_amp:.1f}\nNode color: red=positive bias, blue=negative bias\nNode alpha: darker = larger |bias|\nShows first 2 and last 2 units from each hemisphere{cross_hemi_note}'
     ax.text(0.02, 0.08, thickness_text, transform=ax.transAxes, fontsize=9,
             verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
     # Print bias values and alpha for each recurrent node
     print("\nBias values and alpha for selected recurrent nodes:")
-    print(f"L1 bias: {biases['left_hemi'][0]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][0], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"L2 bias: {biases['left_hemi'][1]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][1], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"L127 bias: {biases['left_hemi'][2]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][2], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"L128 bias: {biases['left_hemi'][3]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][3], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"R1 bias: {biases['right_hemi'][0]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][0], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"R2 bias: {biases['right_hemi'][1]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][1], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"R127 bias: {biases['right_hemi'][2]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][2], min_bias_magnitude, max_bias_magnitude):.3f}")
-    print(f"R128 bias: {biases['right_hemi'][3]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][3], min_bias_magnitude, max_bias_magnitude):.3f}")
+    for i in range(n_left_selected):
+        print(f"L{i+1} bias: {biases['left_hemi'][i]:.6f}, alpha: {get_bias_alpha(biases['left_hemi'][i], min_bias_magnitude, max_bias_magnitude):.3f}")
+    for i in range(n_right_selected):
+        print(f"R{i+1} bias: {biases['right_hemi'][i]:.6f}, alpha: {get_bias_alpha(biases['right_hemi'][i], min_bias_magnitude, max_bias_magnitude):.3f}")
     print(f"Readout bias: {biases['readout'][0]:.6f}, alpha: {get_bias_alpha(biases['readout'][0], min_bias_magnitude, max_bias_magnitude):.3f}")
     print(f"Bias magnitude range: {min_bias_magnitude:.6f} to {max_bias_magnitude:.6f}")
     
@@ -491,12 +541,15 @@ def visualize_rnn_weights(model_path, configs, mode, save_path=None, figsize=(16
     print(f"Scaled input weights (right): {scaled_input_right}")
     print(f"Weight range (scaled): {min_weight:.6f} to {max_weight:.6f}")
     
-    # Print cross-hemisphere weight information
-    print(f"\nCross-hemisphere weights:")
-    print(f"Left-to-right weights (LR): {weights['recurrent_lr']}")
-    print(f"Right-to-left weights (RL): {weights['recurrent_rl']}")
-    print(f"LR weight range: {np.min(np.abs(weights['recurrent_lr'])):.6f} to {np.max(np.abs(weights['recurrent_lr'])):.6f}")
-    print(f"RL weight range: {np.min(np.abs(weights['recurrent_rl'])):.6f} to {np.max(np.abs(weights['recurrent_rl'])):.6f}")
+    # Print cross-hemisphere weight information (only if cross-hemi connections are drawn)
+    if has_cross_hemi:
+        print(f"\nCross-hemisphere weights:")
+        print(f"Left-to-right weights (LR): {weights['recurrent_lr']}")
+        print(f"Right-to-left weights (RL): {weights['recurrent_rl']}")
+        print(f"LR weight range: {np.min(np.abs(weights['recurrent_lr'])):.6f} to {np.max(np.abs(weights['recurrent_lr'])):.6f}")
+        print(f"RL weight range: {np.min(np.abs(weights['recurrent_rl'])):.6f} to {np.max(np.abs(weights['recurrent_rl'])):.6f}")
+    else:
+        print(f"\nCross-hemisphere weights: Not drawn (model type does not include 'cross_hemi')")
     
     # Only apply layout/show if requested
     if save_path:
@@ -544,19 +597,34 @@ def main():
         print("Please train a model first or update the model_path variable")
         return
     
-    # Use a specific 256-neuron model for testing
-    model_path = 'dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular_fixed_input/n_neurons_256_random_seed_4/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_1.00/init_cross_hemi_rel_factor_0.20'
-    
+    # Use a specific 256-neuron model for testing (with cross_hemi)
+    # model_path = 'dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular_fixed_input/n_neurons_256_random_seed_4/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_1.00/init_cross_hemi_rel_factor_0.20'
+
+
     with open('dual_alm_rnn_configs.json', 'r') as f:
         configs = json.load(f)
     
-    # Update configs to match the model
-    configs['n_neurons'] = 256
-    configs['xs_left_alm_amp'] = 1.0
-    configs['xs_right_alm_amp'] = 1.0
-    configs['random_seed'] = 4
-    configs['train_type'] = 'train_type_modular_fixed_input'
+    # Don't override train_type - use the original config value
+    
+    if 'cross_hemi' in configs['train_type']:
+        model_path = 'dual_alm_rnn_models/{}/{}/n_neurons_256_random_seed_{}/unfix_epoch_{}/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+                configs['model_type'],
+                configs['train_type'],
+                configs['random_seed'],
+                configs['unfix_epoch'],
+                float(configs['xs_left_alm_amp']),
+                float(configs['xs_right_alm_amp'])
+            )
 
+    else:
+            
+        model_path = 'dual_alm_rnn_models/{}/{}/n_neurons_256_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+                configs['model_type'],
+                configs['train_type'],
+                configs['random_seed'],
+                float(configs['xs_left_alm_amp']),
+                float(configs['xs_right_alm_amp'])
+            )
     print(f"Using model: {model_path}")
     
     # Parse CLI args first

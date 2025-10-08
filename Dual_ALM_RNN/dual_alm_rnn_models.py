@@ -544,7 +544,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         self.noise = noise
 
         self.rnn_cell = TwoHemiRNNCellGeneral(n_neurons=self.n_neurons, a=self.a, sigma=self.sigma_rec_noise, nonlinearity=nn.Tanh(),
-            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, symmetric_weights=self.symmetric_weights, noise=self.noise)
+            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, 
+            symmetric_weights=self.symmetric_weights, noise=self.noise)
         
         self.w_xh_linear_left_alm = nn.Linear(1, self.n_neurons//2, bias=False)
         self.w_xh_linear_right_alm = nn.Linear(1, self.n_neurons-self.n_neurons//2, bias=False)
@@ -842,6 +843,216 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         #         param.data = original_weights[name]
         
         return hs, zs
+
+
+
+
+
+class TwoHemiRNNTanh_asymmetric_single_readout(nn.Module):
+    # Same class as TwoHemiRNNTanh, but there is a single readout layer for both hemispheres
+
+    # Note: n_neurons here only refers to the right hemi (will be greater than 2), left hemi has 2 neurons
+
+    def __init__(self, configs, a, pert_begin, pert_end, zero_init_cross_hemi=False, return_input=False, noise=True):
+        super().__init__()
+
+        self.one_hot = configs['one_hot']
+
+        self.return_input = return_input
+
+        self.configs = configs
+        self.symmetric_weights = False
+
+        self.a = a
+        self.pert_begin = pert_begin
+        self.pert_end = pert_end
+        self.zero_init_cross_hemi = zero_init_cross_hemi
+        self.init_cross_hemi_rel_factor = configs['init_cross_hemi_rel_factor']
+
+        self.uni_pert_trials_prob = configs['uni_pert_trials_prob']
+        self.left_alm_pert_prob = configs['left_alm_pert_prob']
+
+        # bi stim pert
+        self.bi_pert_trials_prob = None
+
+        self.n_neurons = configs['n_neurons'] # here n neurosn only refers to the right hemi
+        
+        self.n_left_neurons = 2 #self.n_neurons//2
+        self.n_right_neurons = self.n_neurons 
+
+        self.sigma_input_noise = configs['sigma_input_noise']
+        self.sigma_rec_noise = configs['sigma_rec_noise']
+
+        # Define left and right ALM
+        self.left_alm_inds = np.arange(2)
+        self.right_alm_inds = np.arange(self.n_neurons)
+
+        self.noise = noise
+
+        self.rnn_cell = TwoHemiRNNCellGeneral_asymmetric(n_neurons=self.n_neurons, a=self.a, sigma=self.sigma_rec_noise, nonlinearity=nn.Tanh(),
+            zero_init_cross_hemi=self.zero_init_cross_hemi, init_cross_hemi_rel_factor=self.init_cross_hemi_rel_factor, 
+            symmetric_weights=self.symmetric_weights, noise=self.noise)
+        
+        self.w_xh_linear_left_alm = nn.Linear(1, 2, bias=False)
+        self.w_xh_linear_right_alm = nn.Linear(1, self.n_neurons, bias=False)
+        if self.one_hot:
+            self.w_xh_linear_left_alm = nn.Linear(2, 2, bias=False)  # 2 input channels
+            self.w_xh_linear_right_alm = nn.Linear(2, self.n_neurons, bias=False)
+
+        self.readout_linear = nn.Linear(self.n_neurons + 2, 1)
+
+        self.init_params()
+
+        self.drop_p_min = configs['drop_p_min']
+        self.drop_p_max = configs['drop_p_max']
+
+
+        self.xs_left_alm_drop_p = configs['xs_left_alm_drop_p']
+        self.xs_right_alm_drop_p = configs['xs_right_alm_drop_p']
+
+        self.xs_left_alm_amp = configs['xs_left_alm_amp']
+        self.xs_right_alm_amp = configs['xs_right_alm_amp']
+
+
+        self.corrupt=False
+        if 'train_type_modular_corruption' in configs['train_type']:
+            self.corruption_start_epoch = configs['corruption_start_epoch']
+            self.corruption_noise = configs['corruption_noise']
+            self.corruption_type = configs['corruption_type']
+
+
+
+
+    def get_w_hh(self):
+        w_hh = torch.zeros((self.n_neurons+2, self.n_neurons+2))
+        w_hh[:2,:2] = self.rnn_cell.w_hh_linear_ll.weight
+        w_hh[2:,2:] = self.rnn_cell.w_hh_linear_rr.weight
+        w_hh[2:,:2] = self.rnn_cell.w_hh_linear_lr.weight
+        w_hh[:2,2:] = self.rnn_cell.w_hh_linear_rl.weight
+
+        return w_hh
+
+
+
+
+    def init_params(self):
+        init.normal_(self.w_xh_linear_left_alm.weight, 0.0, 1)
+        if self.symmetric_weights:
+            print("Matching weights for left and right ALM")
+
+            self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
+        elif 'fixed_input' in self.configs['train_type']:
+            print("Fixed input weights for left and right ALM")
+
+            
+            channel_0 = torch.cat((torch.ones(int(self.n_right_neurons//2)), torch.zeros(int(self.n_right_neurons//2))))
+            channel_1 = torch.cat((torch.zeros(int(self.n_right_neurons//2)), torch.ones(int(self.n_right_neurons//2))))
+
+            self.w_xh_linear_right_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
+            self.w_xh_linear_left_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
+            
+        else:
+            init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
+
+        # Set all values in readout_linear to be the same value drawn from normal distribution
+        if self.symmetric_weights:
+            val = torch.normal(mean=0.0, std=1.0/math.sqrt(self.n_neurons), size=(1,))
+            with torch.no_grad():
+                self.readout_linear.weight.fill_(val.item())
+        else:
+            init.normal_(self.readout_linear.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+        init.constant_(self.readout_linear.bias, 0.0)
+
+
+
+
+    def forward(self, xs):
+        '''
+        Input:
+        xs: (n_trials, T, 1) or (n_trials, T, 2)
+
+        Output:
+        hs: (n_trials, T, n_neurons)
+        zs: (n_trials, T, 1)
+        '''
+        n_trials = xs.size(0)
+        T = xs.size(1)
+        h_pre = xs.new_zeros(n_trials, self.n_neurons+2)
+        hs = []
+        # input noise
+        xs_noise_left_alm = math.sqrt(2/self.a)*self.sigma_input_noise*torch.randn_like(xs)
+        xs_noise_right_alm = math.sqrt(2/self.a)*self.sigma_input_noise*torch.randn_like(xs)
+
+        if self.symmetric_weights:
+            xs_noise_left_alm = xs_noise_right_alm
+        
+        if self.one_hot:
+            # Input masks - now need to match 2D input
+            xs_left_alm_mask = (torch.rand(n_trials,1,2) >= self.xs_left_alm_drop_p).float().to(xs.device)
+            xs_right_alm_mask = (torch.rand(n_trials,1,2) >= self.xs_right_alm_drop_p).float().to(xs.device)
+        else:
+            # input trial mask
+            xs_left_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_left_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
+            xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
+
+
+        if self.noise:
+            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+        else:
+            # No noise test
+            print("No noise")
+            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
+            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
+
+
+        xs_injected = torch.cat([xs_injected_left_alm, xs_injected_right_alm], 2)
+
+        # Determine trials in which we apply uni pert.
+        n_trials = xs.size(0)
+        pert_trial_inds = np.random.permutation(n_trials)[:int(self.uni_pert_trials_prob*n_trials)]
+        left_pert_trial_inds = pert_trial_inds[:int(self.left_alm_pert_prob*len(pert_trial_inds))]
+        right_pert_trial_inds = pert_trial_inds[int(self.left_alm_pert_prob*len(pert_trial_inds)):]
+
+        # Bi stim pert
+        if self.bi_pert_trials_prob is not None:
+            n_trials = xs.size(0)
+            bi_pert_trial_inds = np.random.permutation(n_trials)[:int(self.bi_pert_trials_prob*n_trials)]
+
+
+        for t in range(T):
+            h = self.rnn_cell(xs_injected[:,t], h_pre) # (n_trials, n_neurons)
+            
+
+            # Apply perturbation.
+            # if t >= self.pert_begin and t <= self.pert_end:
+            #     if self.bi_pert_trials_prob is None:
+            #         self.apply_pert(h, left_pert_trial_inds, right_pert_trial_inds)
+            #     else:
+            #         self.apply_bi_pert(h, bi_pert_trial_inds)
+
+
+            hs.append(h)
+            h_pre = h
+
+        hs = torch.stack(hs, 1)
+        
+        zs = self.readout_linear(hs)  # (n_trials, T, 1)
+
+        if self.return_input:
+            if self.corrupt:
+                return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr, 
+                xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
+                # return ((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp, 
+                # (xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
+            else:
+                return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm,
+                xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs
+                # return ((xs*xs_left_alm_mask + xs_noise_left_alm)*self.xs_left_alm_amp,
+                # (xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp), hs, zs
+        else:
+            return hs, zs
+
 
 
 
@@ -1473,6 +1684,96 @@ class TwoHemiRNNCellGeneral(nn.Module):
             h = (1-self.a)*h_pre + self.a*(self.full_recurrent(h_pre) + x_injected + noise)
 
         return h
+
+
+
+class TwoHemiRNNCellGeneral_asymmetric(nn.Module):
+    '''
+    Same as TwoHemiRNNCellGeneral except that we separately store within-hemi and cross-hemi weights, so that
+    they can easily trained separately.
+    Also there are only 2 neurons in the left hemisphere and more in the right hemisphere
+    '''
+
+    def __init__(self, n_neurons=128, a=0.2, sigma=0.05, nonlinearity=nn.Tanh(), zero_init_cross_hemi=False,\
+        init_cross_hemi_rel_factor=1, bias=True, symmetric_weights=False, noise=True):
+        super().__init__()
+        self.n_neurons = n_neurons # here n neurosn only refers to the right hemi
+        self.n_left_neurons = 2 #self.n_neurons//2
+        self.n_right_neurons = self.n_neurons 
+        self.a = a
+        self.sigma = sigma
+        self.symmetric_weights = symmetric_weights
+        self.noise = noise
+        self.nonlinearity = nonlinearity
+        self.zero_init_cross_hemi = zero_init_cross_hemi
+        self.init_cross_hemi_rel_factor = init_cross_hemi_rel_factor
+
+        self.bias = bias
+
+        self.w_hh_linear_ll = nn.Linear(2, 2, bias=self.bias)
+        self.w_hh_linear_rr = nn.Linear(self.n_neurons, self.n_neurons, bias=self.bias)
+
+        self.w_hh_linear_lr = nn.Linear(2, self.n_neurons, bias=False)
+        self.w_hh_linear_rl = nn.Linear(self.n_neurons, 2, bias=False)
+
+
+        self.init_params()
+
+    def init_params(self):
+
+        if self.symmetric_weights:
+            init.normal_(self.w_hh_linear_ll.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+            self.w_hh_linear_rr.weight = self.w_hh_linear_ll.weight
+        else:
+            init.normal_(self.w_hh_linear_ll.weight, 0.0, 1.0/math.sqrt(self.n_left_neurons))
+            init.normal_(self.w_hh_linear_rr.weight, 0.0, 1.0/math.sqrt(self.n_right_neurons))
+
+        if self.zero_init_cross_hemi:
+            init.constant_(self.w_hh_linear_lr.weight, 0.0)
+            init.constant_(self.w_hh_linear_rl.weight, 0.0)
+
+        else:
+            init.normal_(self.w_hh_linear_lr.weight, 0.0, self.init_cross_hemi_rel_factor/math.sqrt(self.n_left_neurons + self.n_right_neurons))
+            init.normal_(self.w_hh_linear_rl.weight, 0.0, self.init_cross_hemi_rel_factor/math.sqrt(self.n_left_neurons + self.n_right_neurons))
+
+
+        if self.bias:
+            init.constant_(self.w_hh_linear_ll.bias, 0.0)
+            init.constant_(self.w_hh_linear_rr.bias, 0.0)
+
+
+    def full_recurrent(self, h_pre):
+        h_pre_left = h_pre[:,:self.n_left_neurons]
+        h_pre_right = h_pre[:,self.n_left_neurons:]
+
+        h1 = torch.cat([self.w_hh_linear_ll(h_pre_left), self.w_hh_linear_lr(h_pre_left)], 1) # (n_neurons)
+        # h2 = torch.cat([self.w_hh_linear_rl(h_pre_right), self.w_hh_linear_rr(h_pre_right)], 1) # (n_neurons)
+
+        # return h1 + h2
+        return h1
+
+
+    def forward(self, x_injected, h_pre):
+        '''
+        Input:
+        x_injected: (n_trials, n_neurons)
+        h_pre: (n_trials, n_neurons)
+
+        Output:
+        h: (n_trials, n_neurons)
+        '''
+
+        if self.noise:
+            noise = math.sqrt(2/self.a)*self.sigma*torch.randn_like(x_injected)
+        else:
+            noise = 0.0
+        if self.nonlinearity is not None:
+            h = (1-self.a)*h_pre + self.a*self.nonlinearity(self.full_recurrent(h_pre) + x_injected + noise)
+        else:
+            h = (1-self.a)*h_pre + self.a*(self.full_recurrent(h_pre) + x_injected + noise)
+
+        return h
+
 
 
 

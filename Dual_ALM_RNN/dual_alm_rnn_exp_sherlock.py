@@ -1285,6 +1285,9 @@ class DualALMRNNExp(object):
         if 'cross_hemi' in train_type:
             model = getattr(sys.modules[__name__], model_type)(self.configs, \
                 self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=False).to(device)
+        elif 'asymmetric' in train_type and self.configs['n_neurons'] != 4:
+            model = TwoHemiRNNTanh_asymmetric_single_readout(self.configs, \
+                self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=False).to(device)
         else:
             model = getattr(sys.modules[__name__], model_type)(self.configs, \
                 self.a, self.pert_begin, self.pert_end, zero_init_cross_hemi=True).to(device)
