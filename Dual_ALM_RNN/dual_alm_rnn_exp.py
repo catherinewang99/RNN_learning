@@ -2648,7 +2648,7 @@ class DualALMRNNExp(object):
                 allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout, corrupt=corrupt_state)
 
                 bias = model.readout_linear.bias.data.cpu().numpy()[0]
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 if asymmetric:
                     readout_left_weight = model.readout_linear.weight.data.cpu().numpy()[0, :2]  # (1, 2)
                     readout_right_weight = model.readout_linear.weight.data.cpu().numpy()[0, 2:]  # (1, n_neurons-2)

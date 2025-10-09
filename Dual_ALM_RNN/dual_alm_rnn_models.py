@@ -948,8 +948,8 @@ class TwoHemiRNNTanh_asymmetric_single_readout(nn.Module):
             channel_0 = torch.cat((torch.ones(int(self.n_right_neurons//2)), torch.zeros(int(self.n_right_neurons//2))))
             channel_1 = torch.cat((torch.zeros(int(self.n_right_neurons//2)), torch.ones(int(self.n_right_neurons//2))))
 
-            self.w_xh_linear_right_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
-            self.w_xh_linear_left_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
+            self.w_xh_linear_left_alm.weight.data = torch.tensor([[1.0,0.0],[0.0,1.0]], dtype=torch.float32)
+            self.w_xh_linear_right_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
             
         else:
             init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
@@ -961,6 +961,12 @@ class TwoHemiRNNTanh_asymmetric_single_readout(nn.Module):
                 self.readout_linear.weight.fill_(val.item())
         else:
             init.normal_(self.readout_linear.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
+        # Normalize readout_linear weights so that their absolute summed value is 3
+        with torch.no_grad():
+            weight = self.readout_linear.weight
+            abs_sum = torch.sum(torch.abs(weight))
+            if abs_sum > 0:
+                weight.mul_(3.0 / abs_sum)
         init.constant_(self.readout_linear.bias, 0.0)
 
 
@@ -1727,6 +1733,13 @@ class TwoHemiRNNCellGeneral_asymmetric(nn.Module):
         else:
             init.normal_(self.w_hh_linear_ll.weight, 0.0, 1.0/math.sqrt(self.n_left_neurons))
             init.normal_(self.w_hh_linear_rr.weight, 0.0, 1.0/math.sqrt(self.n_right_neurons))
+
+            # Normalize w_hh_linear_rr weights so that their absolute sum is 3
+            with torch.no_grad():
+                weight = self.w_hh_linear_rr.weight
+                abs_sum = torch.sum(torch.abs(weight))
+                if abs_sum > 0:
+                    weight.mul_(3.6 / abs_sum)
 
         if self.zero_init_cross_hemi:
             init.constant_(self.w_hh_linear_lr.weight, 0.0)
