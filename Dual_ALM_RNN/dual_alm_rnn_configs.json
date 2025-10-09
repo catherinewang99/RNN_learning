@@ -35,7 +35,7 @@
     "init_cross_hemi_rel_factor":0.2,
 
 
-    "unfix_epoch":10,
+    "unfix_epoch":0,
 
 
     "corruption_start_epoch":15,

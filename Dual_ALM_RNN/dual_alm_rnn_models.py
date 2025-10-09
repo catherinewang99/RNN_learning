@@ -1747,10 +1747,9 @@ class TwoHemiRNNCellGeneral_asymmetric(nn.Module):
         h_pre_right = h_pre[:,self.n_left_neurons:]
 
         h1 = torch.cat([self.w_hh_linear_ll(h_pre_left), self.w_hh_linear_lr(h_pre_left)], 1) # (n_neurons)
-        # h2 = torch.cat([self.w_hh_linear_rl(h_pre_right), self.w_hh_linear_rr(h_pre_right)], 1) # (n_neurons)
+        h2 = torch.cat([self.w_hh_linear_rl(h_pre_right), self.w_hh_linear_rr(h_pre_right)], 1) # (n_neurons) 
 
-        # return h1 + h2
-        return h1
+        return h1 + h2
 
 
     def forward(self, x_injected, h_pre):
