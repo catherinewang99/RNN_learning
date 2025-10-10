@@ -1,0 +1,21 @@
+import os
+import numpy as np
+import torch
+from dual_alm_rnn_exp import DualALMRNNExp
+
+
+
+input_asym = [(1,0), (1,0.1), (1,0.2), (1,0.3), (1,0.4), (1,0.5), (1,1), (0.5,1), (0.4,1), (0.3,1), (0.2,1), (0.1,1), (0,1)] # Sane as BK
+
+# Initialize experiment
+exp = DualALMRNNExp()
+
+# Train RNN for each input asymmetry
+for seed in range(100):
+    for epoch in [1, 11]:
+        exp.configs['xs_left_alm_amp'] = 1.0
+        exp.configs['xs_right_alm_amp'] = 1.0
+        exp.configs['random_seed'] = seed
+        exp.configs['train_type'] = 'train_type_asymmetric_fixed_input_mult_seeds'
+        exp.configs['unfix_epoch'] = epoch
+        exp.train_type_modular_single_readout()

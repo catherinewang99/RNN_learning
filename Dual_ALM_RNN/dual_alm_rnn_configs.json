@@ -5,7 +5,7 @@
     "plots_dir": "dual_alm_rnn_plots",
     "results_dir": "dual_alm_rnn_results",
     "model_type":"TwoHemiRNNTanh_single_readout",
-    "train_type":"train_type_modular_asymmetric_fixed_input",
+    "train_type":"train_type_modular_fixed_input_cross_hemi",
     "use_cuda":1,
     "gpu_ids":[0],
     "bs":256,
@@ -14,12 +14,12 @@
     "log_interval":10,
     "num_workers":0,
     "pin_memory":0,
-    "n_neurons":128,
+    "n_neurons":256,
     "sigma_input_noise":0.1,
     "sigma_rec_noise":0.1,
     "test_sigma_input_noise":0.1,
     "test_sigma_rec_noise":0.1, 
-    "random_seed":1,
+    "random_seed":2,
     "dataset_random_seed":111,
     "test_random_seed":777,
     "uni_pert_trials_prob":0,
@@ -35,7 +35,7 @@
     "init_cross_hemi_rel_factor":0.2,
 
 
-    "unfix_epoch":1,
+    "unfix_epoch":0,
 
 
     "corruption_start_epoch":15,
