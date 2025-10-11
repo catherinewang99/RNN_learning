@@ -353,8 +353,8 @@ class DualALMRNNExp(object):
         n_val_trials = 1000
         n_test_trials = 1000
 
-        sensory_input_means = self.sensory_input_means
-        sensory_input_stds = self.sensory_input_stds
+        sensory_input_means = self.sensory_input_means # 0.15
+        sensory_input_stds = self.sensory_input_stds # 1
 
         '''
         Generate the train, val and test set.
@@ -1248,32 +1248,39 @@ class DualALMRNNExp(object):
         '''
         Load the dataset and wrap it with Pytorch Dataset.
         '''
+        train_save_path = os.path.join(self.configs['data_dir'], 'train')
+        val_save_path = os.path.join(self.configs['data_dir'], 'val')
+        test_save_path = os.path.join(self.configs['data_dir'], 'test')
+
+
+        if self.configs['n_neurons'] < 5: # use simple dataset for the smaller model
+
+            train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+            train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+            val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+            val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+            test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+            test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
+
+        else:
+
+            train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+            train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
+            val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+            val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
+            test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
+            test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels.npy'))
+
 
         # train
-        train_save_path = os.path.join(self.configs['data_dir'], 'train')
-
-        train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
-        train_trial_type_labels = np.load(os.path.join(train_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
-
         train_set = data.TensorDataset(torch.tensor(train_sensory_inputs), torch.tensor(train_trial_type_labels))
-
         train_loader = data.DataLoader(train_set, **params, drop_last=False)
 
         # val
-        val_save_path = os.path.join(self.configs['data_dir'], 'val')
-
-        val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
-        val_trial_type_labels = np.load(os.path.join(val_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
-
         val_set = data.TensorDataset(torch.tensor(val_sensory_inputs), torch.tensor(val_trial_type_labels))
-
         val_loader = data.DataLoader(val_set, **params)
 
-        # load test data for later
-        test_save_path = os.path.join(self.configs['data_dir'], 'test')
-        test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
-        test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
-        
+        # load test data for later        
         test_set = torch.utils.data.TensorDataset(torch.tensor(test_sensory_inputs), torch.tensor(test_trial_type_labels))
         test_loader = torch.utils.data.DataLoader(test_set, **params)
 

@@ -632,7 +632,6 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
         left_pert_drop_ps = np.random.uniform(self.drop_p_min, self.drop_p_max, n_left_pert_trials) # (n_left_per_trials)
 
-
         left_pert_mask = np.zeros((n_trials, n_neurons), dtype=bool)
 
         for i in range(n_left_pert_trials):
