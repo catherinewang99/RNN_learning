@@ -1429,6 +1429,11 @@ class DualALMRNNExp(object):
                     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. 
 
                 else:
+
+                    if 'switch' in train_type:
+                        model.xs_left_alm_amp = 0
+                        model.xs_right_alm_amp = 0
+
                     print('train the cross hemi weights at epoch {}'.format(epoch + 1))
                     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_cross_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
             else:
