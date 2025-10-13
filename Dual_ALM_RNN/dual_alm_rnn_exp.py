@@ -101,6 +101,14 @@ class DualALMRNNExp(object):
                 'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
                 'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
                 'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+        elif 'switch' in train_type:
+            self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']), \
+                'switch_epoch_n_{}'.format(self.configs['switch_epoch_n']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
         elif 'asymmetric_fix' in train_type or 'train_type_modular_fixed_input_cross_hemi' in train_type:
             self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']), \
                 'unfix_epoch_{}'.format(self.configs['unfix_epoch']),\
@@ -1306,6 +1314,8 @@ class DualALMRNNExp(object):
         '''
         params_within_hemi = []
         params_within_hemi_and_cross_hemi = []
+        params_within_hemi_and_lefttoright = []
+        params_within_hemi_and_righttoleft = []
         params_cross_hemi = []
         n_neurons = self.configs['n_neurons']
 
@@ -1317,9 +1327,15 @@ class DualALMRNNExp(object):
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_within_hemi.append(param)
                     params_within_hemi_and_cross_hemi.append(param)
+                    params_within_hemi_and_lefttoright.append(param)
+                    params_within_hemi_and_righttoleft.append(param)
                 if 'cross_hemi' in train_type: # train the cross hemi weights as well as the within hemi weights
                     if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                         params_within_hemi_and_cross_hemi.append(param)
+                        if '_rl' in name:
+                            params_within_hemi_and_righttoleft.append(param)
+                        if '_lr' in name:
+                            params_within_hemi_and_lefttoright.append(param)
 
             if 'asymmetric_fix' in train_type:
                 if ('w_hh_linear_rr' in name) or ('readout_linear' in name):
@@ -1342,6 +1358,12 @@ class DualALMRNNExp(object):
         if 'asymmetric_fix' in train_type:
             optimizer_fixed_within_hemi = optim.Adam(params_fixed_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
             optimizer_fixed_within_hemi_cross_hemi = optim.Adam(params_fixed_within_hemi_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+        elif 'switch' in train_type:
+            optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+            optimizer_within_hemi_and_cross_hemi = optim.Adam(params_within_hemi_and_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+            optimizer_within_hemi_and_lefttoright = optim.Adam(params_within_hemi_and_lefttoright, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+            optimizer_within_hemi_and_righttoleft = optim.Adam(params_within_hemi_and_righttoleft, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
+            optimizer_cross_hemi = optim.Adam(params_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
         else:
             optimizer_within_hemi = optim.Adam(params_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
             optimizer_within_hemi_and_cross_hemi = optim.Adam(params_within_hemi_and_cross_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
@@ -1429,13 +1451,30 @@ class DualALMRNNExp(object):
                     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. 
 
                 else:
+                    if 'switch' in train_type: # Switch between giving left and right ALM no input (just noise)
+                        switch_epoch_n = self.configs['switch_epoch_n']
+                        print(f'switch the L/R input every {switch_epoch_n} epochs')
+                        if epoch == 0: # Start by training right ALM
+                            model.xs_left_alm_amp = 0
+                            model.xs_right_alm_amp = 1
+                            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct) # Per each training batch. 
+                        elif epoch % switch_epoch_n == 0:
+                            if model.xs_left_alm_amp == 0:
+                                print('Switch to train left ALM')
+                                model.xs_left_alm_amp = 1
+                                model.xs_right_alm_amp = 0
+                                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_righttoleft, epoch, loss_fct)
 
-                    if 'switch' in train_type:
-                        model.xs_left_alm_amp = 0
-                        model.xs_right_alm_amp = 0
+                            elif model.xs_right_alm_amp == 0:
+                                print('Switch to train right ALM')
+                                model.xs_left_alm_amp = 0
+                                model.xs_right_alm_amp = 1
+                                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct)
+                        
+                    else:
 
-                    print('train the cross hemi weights at epoch {}'.format(epoch + 1))
-                    train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_cross_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
+                        print('train the cross hemi weights at epoch {}'.format(epoch + 1))
+                        train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_cross_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
             else:
                     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
             # total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
