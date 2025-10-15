@@ -527,6 +527,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         self.uni_pert_trials_prob = configs['uni_pert_trials_prob']
         self.left_alm_pert_prob = configs['left_alm_pert_prob']
 
+        self.train_type = configs['train_type']
+
         # bi stim pert
         self.bi_pert_trials_prob = None
 
@@ -724,8 +726,19 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
 
             if self.noise:
-                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
-                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+                if 'switch' in self.train_type:
+                    # Switch between giving left and right ALM no input (just noise) or both get input
+                    random_bits_left = np.random.randint(0, 2, size=(n_trials, 1, 1))
+                    constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
+                    random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))
+                    constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+                    
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+                else:
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
             else:
                 # No noise test
                 print("No noise")
@@ -777,6 +790,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                 xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
                 # return ((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp, 
                 # (xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
+            elif 'switch' in self.train_type:
+                return (constant_01_rows_left, constant_01_rows_right), hs, zs
             else:
                 return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm,
                 xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs

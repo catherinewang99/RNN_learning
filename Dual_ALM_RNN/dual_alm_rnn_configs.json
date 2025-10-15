@@ -19,7 +19,7 @@
     "sigma_rec_noise":0.1,
     "test_sigma_input_noise":0.1,
     "test_sigma_rec_noise":0.1, 
-    "random_seed":2,
+    "random_seed":0,
     "dataset_random_seed":111,
     "test_random_seed":777,
     "uni_pert_trials_prob":0,
@@ -36,7 +36,7 @@
 
 
     "unfix_epoch":0,
-    "switch_epoch_n":2,
+    "switch_epoch_n":0,
 
 
     "corruption_start_epoch":15,

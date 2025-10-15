@@ -229,6 +229,7 @@ class DualALMRNNExp(object):
         '''
 
         train_sensory_inputs = np.zeros((n_train_trials, T, 1), dtype=np.float32)
+        train_sensory_inputs_same_noise = np.zeros((n_train_trials, T, 1), dtype=np.float32)
         train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
 
         shuffled_inds = np.random.permutation(n_train_trials)
@@ -241,7 +242,6 @@ class DualALMRNNExp(object):
 
             train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds)] = \
             sensory_input_means[i] + sensory_input_stds[i]*gaussian_samples
-
 
         '''
         Generate the val set.
@@ -373,6 +373,10 @@ class DualALMRNNExp(object):
         val_sensory_inputs = np.zeros((n_val_trials, T, 2), dtype=np.float32) 
         test_sensory_inputs = np.zeros((n_test_trials, T, 2), dtype=np.float32)
 
+        train_sensory_inputs_same_noise = np.zeros((n_train_trials, T, 2), dtype=np.float32)
+        val_sensory_inputs_same_noise = np.zeros((n_val_trials, T, 2), dtype=np.float32) 
+        test_sensory_inputs_same_noise = np.zeros((n_test_trials, T, 2), dtype=np.float32)
+
         train_trial_type_labels = np.zeros((n_train_trials,), dtype=int)
         val_trial_type_labels = np.zeros((n_val_trials,), dtype=int)
         test_trial_type_labels = np.zeros((n_test_trials,), dtype=int)
@@ -386,27 +390,37 @@ class DualALMRNNExp(object):
         test_trial_type_labels[shuffled_inds[:n_test_trials//2]] = 1
         
         # For each trial type, set the appropriate one-hot channel
+        gaussian_samples_set = np.random.randn(len(sample_inds), 1)
         for i in range(self.n_trial_types):
 
             # Train labels first
             cur_trial_type_inds = np.nonzero(train_trial_type_labels==i)[0]
             gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            all_gaussian_samples_set = np.tile(gaussian_samples_set, (len(cur_trial_type_inds), 1, 1))
             # Left trials (i=0): [1, 0], Right trials (i=1): [0, 1]
             train_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
             sensory_input_means[1] + sensory_input_stds[1]*gaussian_samples # Only use the positive values
 
+            train_sensory_inputs_same_noise[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means[1] + sensory_input_stds[1]*all_gaussian_samples_set
+
             # Val labels
             cur_trial_type_inds = np.nonzero(val_trial_type_labels==i)[0]
             gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            all_gaussian_samples_set = np.tile(gaussian_samples_set, (len(cur_trial_type_inds), 1, 1))
             val_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
             sensory_input_means[1] + sensory_input_stds[1]*gaussian_samples # Only use the positive values
-
+            val_sensory_inputs_same_noise[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means[1] + sensory_input_stds[1]*all_gaussian_samples_set # Only use the positive values
+    
             # Test labels
             cur_trial_type_inds = np.nonzero(test_trial_type_labels==i)[0]
             gaussian_samples = np.random.randn(len(cur_trial_type_inds), len(sample_inds), 1)
+            all_gaussian_samples_set = np.tile(gaussian_samples_set, (len(cur_trial_type_inds), 1, 1))
             test_sensory_inputs[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
             sensory_input_means[1] + sensory_input_stds[1]*gaussian_samples # Only use the positive values
-
+            test_sensory_inputs_same_noise[np.ix_(cur_trial_type_inds, sample_inds, [i])] = \
+            sensory_input_means[1] + sensory_input_stds[1]*all_gaussian_samples_set # Only use the positive values
 
         '''
         Save.
@@ -415,16 +429,18 @@ class DualALMRNNExp(object):
         os.makedirs(train_save_path, exist_ok=True)
         np.save(os.path.join(train_save_path, 'onehot_sensory_inputs.npy'), train_sensory_inputs)
         np.save(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'), train_trial_type_labels)
-
+        np.save(os.path.join(train_save_path, 'onehot_sensory_inputs_same_noise.npy'), train_sensory_inputs_same_noise)
         val_save_path = os.path.join(self.configs['data_dir'], 'val')
         os.makedirs(val_save_path, exist_ok=True)
         np.save(os.path.join(val_save_path, 'onehot_sensory_inputs.npy'), val_sensory_inputs)
         np.save(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'), val_trial_type_labels)
+        np.save(os.path.join(val_save_path, 'onehot_sensory_inputs_same_noise.npy'), val_sensory_inputs_same_noise)
 
         test_save_path = os.path.join(self.configs['data_dir'], 'test')
         os.makedirs(test_save_path, exist_ok=True)
         np.save(os.path.join(test_save_path, 'onehot_sensory_inputs.npy'), test_sensory_inputs)
         np.save(os.path.join(test_save_path, 'onehot_trial_type_labels.npy'), test_trial_type_labels)
+        np.save(os.path.join(test_save_path, 'onehot_sensory_inputs_same_noise.npy'), test_sensory_inputs_same_noise)
 
 
         sample_inds = np.random.permutation(n_train_trials)[:10]
@@ -1270,6 +1286,14 @@ class DualALMRNNExp(object):
             test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
             test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
 
+        elif 'switch' in train_type:
+            train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_same_noise.npy'))
+            train_trial_type_labels = np.load(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'))
+            val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_same_noise.npy'))
+            val_trial_type_labels = np.load(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'))
+            test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_same_noise.npy'))
+            test_trial_type_labels = np.load(os.path.join(test_save_path, 'onehot_trial_type_labels.npy'))
+
         else:
 
             train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
@@ -1310,7 +1334,7 @@ class DualALMRNNExp(object):
 
 
         '''
-        We only train the recurrent weights.
+        We train specific weights based on the train_type.
         '''
         params_within_hemi = []
         params_within_hemi_and_cross_hemi = []
@@ -1452,24 +1476,32 @@ class DualALMRNNExp(object):
 
                 else:
                     if 'switch' in train_type: # Switch between giving left and right ALM no input (just noise)
-                        switch_epoch_n = self.configs['switch_epoch_n']
-                        print(f'switch the L/R input every {switch_epoch_n} epochs')
-                        if epoch == 0: # Start by training right ALM
-                            model.xs_left_alm_amp = 0
-                            model.xs_right_alm_amp = 1
-                            train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct) # Per each training batch. 
-                        elif epoch % switch_epoch_n == 0:
-                            if model.xs_left_alm_amp == 0:
-                                print('Switch to train left ALM')
-                                model.xs_left_alm_amp = 1
-                                model.xs_right_alm_amp = 0
-                                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_righttoleft, epoch, loss_fct)
 
-                            elif model.xs_right_alm_amp == 0:
-                                print('Switch to train right ALM')
-                                model.xs_left_alm_amp = 0
-                                model.xs_right_alm_amp = 1
-                                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct)
+                        # Switch every few epochs regime
+
+                        # switch_epoch_n = self.configs['switch_epoch_n']
+                        # print(f'switch the L/R input every {switch_epoch_n} epochs')
+                        # if epoch == 0: # Start by training right ALM
+                        #     model.xs_left_alm_amp = 0
+                        #     model.xs_right_alm_amp = 1
+                        #     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct) # Per each training batch. 
+                        # elif epoch % switch_epoch_n == 0:
+                        #     if model.xs_left_alm_amp == 0:
+                        #         print('Switch to train left ALM')
+                        #         model.xs_left_alm_amp = 1
+                        #         model.xs_right_alm_amp = 0
+                        #         train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_righttoleft, epoch, loss_fct)
+
+                        #     elif model.xs_right_alm_amp == 0:
+                        #         print('Switch to train right ALM')
+                        #         model.xs_left_alm_amp = 0
+                        #         model.xs_right_alm_amp = 1
+                        #         train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct)
+
+
+                        # train all trial types all the time
+
+                        train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_cross_hemi, epoch, loss_fct) # Per each training batch.
                         
                     else:
 
