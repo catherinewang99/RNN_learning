@@ -600,9 +600,15 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         elif 'fixed_input' in self.configs['train_type']:
             print("Fixed input weights for left and right ALM")
 
-            
-            channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)), torch.zeros(int(self.n_left_neurons//2))))
-            channel_1 = torch.cat((torch.zeros(int(self.n_left_neurons//2)), torch.ones(int(self.n_left_neurons//2))))
+            if self.n_neurons < 500:
+                # Only set half and half when there are two neurons per hemisphere
+                channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)), torch.zeros(int(self.n_left_neurons//2))))
+                channel_1 = torch.cat((torch.zeros(int(self.n_left_neurons//2)), torch.ones(int(self.n_left_neurons//2))))
+
+            else:
+                # Set all to all when there are more than two neurons per hemisphere
+                channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / self.n_neurons, torch.ones(int(self.n_left_neurons//2)) / self.n_neurons))
+                channel_1 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / self.n_neurons, torch.ones(int(self.n_left_neurons//2)) / self.n_neurons))
 
             # import pdb; pdb.set_trace()
             self.w_xh_linear_right_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
@@ -723,8 +729,6 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         else:
             # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
 
-
-
             if self.noise:
 
                 if 'switch' in self.train_type:
@@ -733,6 +737,18 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                     constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
                     random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))
                     constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+
+                    # Noise variable
+                    # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
+                    scaling_factors_left = np.where(random_bits_left == 0, 1.0, self.sigma_input_noise).astype(np.float32)
+                    scaling_factors_right = np.where(random_bits_right == 0, 1.0, self.sigma_input_noise).astype(np.float32)
+                    # Broadcast to shape (1000, 100, 2)
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
                     
                     xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
                     xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
