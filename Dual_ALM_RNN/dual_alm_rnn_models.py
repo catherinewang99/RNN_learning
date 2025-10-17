@@ -607,8 +607,10 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
             else:
                 # Set all to all when there are more than two neurons per hemisphere
-                channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / self.n_neurons, torch.ones(int(self.n_left_neurons//2)) / self.n_neurons))
-                channel_1 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / self.n_neurons, torch.ones(int(self.n_left_neurons//2)) / self.n_neurons))
+                norm_factor = self.n_neurons
+                norm_factor = 1
+                channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / norm_factor, torch.ones(int(self.n_left_neurons//2)) / norm_factor))
+                channel_1 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / norm_factor, torch.ones(int(self.n_left_neurons//2)) / norm_factor))
 
             # import pdb; pdb.set_trace()
             self.w_xh_linear_right_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
@@ -733,6 +735,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
                 if 'switch' in self.train_type:
                     # Switch between giving left and right ALM no input (just noise) or both get input
+                    # Here, can also switch between giving 0.2 or 0.5 input instead of 0
                     random_bits_left = np.random.randint(0, 2, size=(n_trials, 1, 1))
                     constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
                     random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))

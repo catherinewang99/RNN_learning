@@ -1,4 +1,4 @@
-import torch
+import torch, sys
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -28,10 +28,10 @@ def load_model_weights(model_path, mode):
         configs = json.load(f)
     
     # Update configs to match the model before initializing
-    configs['n_neurons'] = 256
-    configs['xs_left_alm_amp'] = 1.0
-    configs['xs_right_alm_amp'] = 1.0
-    configs['random_seed'] = 4
+    # configs['n_neurons'] = 256
+    # configs['xs_left_alm_amp'] = 1.0
+    # configs['xs_right_alm_amp'] = 1.0
+    # configs['random_seed'] = 4
     # Don't override train_type - use the original config value
     
     # Initialize model
@@ -599,32 +599,39 @@ def main():
     
     # Use a specific 256-neuron model for testing (with cross_hemi)
     # model_path = 'dual_alm_rnn_models/TwoHemiRNNTanh_single_readout/train_type_modular_fixed_input/n_neurons_256_random_seed_4/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_1.00_right_alm_amp_1.00/init_cross_hemi_rel_factor_0.20'
-
+    exp = DualALMRNNExp()
 
     with open('dual_alm_rnn_configs.json', 'r') as f:
         configs = json.load(f)
     
     # Don't override train_type - use the original config value
     
-    if 'cross_hemi' in configs['train_type']:
-        model_path = 'dual_alm_rnn_models/{}/{}/n_neurons_256_random_seed_{}/unfix_epoch_{}/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
-                configs['model_type'],
-                configs['train_type'],
-                configs['random_seed'],
-                configs['unfix_epoch'],
-                float(configs['xs_left_alm_amp']),
-                float(configs['xs_right_alm_amp'])
-            )
+    # if 'cross_hemi' in configs['train_type']:
+        # model_path = 'dual_alm_rnn_models/{}/{}/n_neurons_256_random_seed_{}/unfix_epoch_{}/n_epochs_{}_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+        #         configs['model_type'],
+        #         configs['train_type'],
+        #         configs['random_seed'],
+        #         configs['unfix_epoch'],
+        #         float(configs['xs_left_alm_amp']),
+        #         float(configs['xs_right_alm_amp'])
+        #     )
 
-    else:
+    model = getattr(sys.modules[__name__], configs['model_type'])(configs, \
+        exp.a, exp.pert_begin, exp.pert_end, noise=True)
+    # model = TwoHemiRNNTanh_single_readout(configs, exp.a, exp.pert_begin, exp.pert_end)
+    exp.init_sub_path(configs['train_type'])
+
+    model_path = os.path.join(exp.configs['models_dir'], exp.configs['model_type'], exp.sub_path)
+
+    # else:
             
-        model_path = 'dual_alm_rnn_models/{}/{}/n_neurons_256_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
-                configs['model_type'],
-                configs['train_type'],
-                configs['random_seed'],
-                float(configs['xs_left_alm_amp']),
-                float(configs['xs_right_alm_amp'])
-            )
+    #     model_path = 'dual_alm_rnn_models/{}/{}/n_neurons_256_random_seed_{}/n_epochs_30_n_epochs_across_hemi_0/lr_1.0e-04_bs_256/sigma_input_noise_0.10_sigma_rec_noise_0.10/xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}/init_cross_hemi_rel_factor_0.20/'.format(
+    #             configs['model_type'],
+    #             configs['train_type'],
+    #             configs['random_seed'],
+    #             float(configs['xs_left_alm_amp']),
+    #             float(configs['xs_right_alm_amp'])
+            # )
     print(f"Using model: {model_path}")
     
     # Parse CLI args first
