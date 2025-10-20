@@ -561,6 +561,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
         self.drop_p_min = configs['drop_p_min']
         self.drop_p_max = configs['drop_p_max']
+        self.dropout_p = configs['dropout_p']
 
 
         self.xs_left_alm_drop_p = configs['xs_left_alm_drop_p']
@@ -599,23 +600,31 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             self.w_xh_linear_right_alm.weight = self.w_xh_linear_left_alm.weight
         elif 'fixed_input' in self.configs['train_type']:
             print("Fixed input weights for left and right ALM")
+            if self.one_hot:
 
-            if self.n_neurons < 500:
-                # Only set half and half when there are two neurons per hemisphere
-                channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)), torch.zeros(int(self.n_left_neurons//2))))
-                channel_1 = torch.cat((torch.zeros(int(self.n_left_neurons//2)), torch.ones(int(self.n_left_neurons//2))))
+                if self.n_neurons < 500:
+                    # Only set half and half when there are two neurons per hemisphere
+                    channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)), torch.zeros(int(self.n_left_neurons//2))))
+                    channel_1 = torch.cat((torch.zeros(int(self.n_left_neurons//2)), torch.ones(int(self.n_left_neurons//2))))
+
+                else:
+                    # Set all to all when there are more than two neurons per hemisphere
+                    norm_factor = self.n_neurons
+                    norm_factor = 1
+                    channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / norm_factor, torch.ones(int(self.n_left_neurons//2)) / norm_factor))
+                    channel_1 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / norm_factor, torch.ones(int(self.n_left_neurons//2)) / norm_factor))
+
+                # import pdb; pdb.set_trace()
+                self.w_xh_linear_right_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
+                self.w_xh_linear_left_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
 
             else:
-                # Set all to all when there are more than two neurons per hemisphere
-                norm_factor = self.n_neurons
-                norm_factor = 1
-                channel_0 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / norm_factor, torch.ones(int(self.n_left_neurons//2)) / norm_factor))
-                channel_1 = torch.cat((torch.ones(int(self.n_left_neurons//2)) / norm_factor, torch.ones(int(self.n_left_neurons//2)) / norm_factor))
+                print("not one hot")
+                init.normal_(self.w_xh_linear_left_alm.weight, 0.0, 1)
+                init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
 
-            # import pdb; pdb.set_trace()
-            self.w_xh_linear_right_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
-            self.w_xh_linear_left_alm.weight.data = torch.stack((channel_0, channel_1), dim=1) #dtype=torch.float32)
-            
+
+                
         else:
             init.normal_(self.w_xh_linear_right_alm.weight, 0.0, 1)
 
@@ -755,6 +764,18 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                     
                     xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
                     xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+
+                elif 'dropout' in self.train_type:
+                    m = nn.Dropout(p=self.dropout_p)
+
+                    xs_left_input = xs*xs_left_alm_mask*self.xs_left_alm_amp 
+                    xs_left_input = m(xs_left_input)  
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs_left_input + xs_noise_left_alm)
+                   
+                    xs_right_input = xs*xs_right_alm_mask*self.xs_right_alm_amp 
+                    xs_right_input = m(xs_right_input)  
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs_right_input + xs_noise_right_alm)
+
                 else:
                     xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
                     xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)

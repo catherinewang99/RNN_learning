@@ -5,7 +5,7 @@
     "plots_dir": "dual_alm_rnn_plots",
     "results_dir": "dual_alm_rnn_results",
     "model_type":"TwoHemiRNNTanh_single_readout",
-    "train_type":"train_type_modular_fixed_input_cross_hemi_switch",
+    "train_type":"train_type_modular_fixed_input_cross_hemi",
     "use_cuda":1,
     "gpu_ids":[0],
     "bs":256,
@@ -37,11 +37,12 @@
 
     "unfix_epoch":0,
     "switch_epoch_n":0,
+    "dropout_p":0.5,
 
 
     "corruption_start_epoch":15,
     "corruption_noise": 0.5,
     "corruption_type":"gaussian",
 
-    "one_hot":1
+    "one_hot":0
 }
