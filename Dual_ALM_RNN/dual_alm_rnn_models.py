@@ -745,11 +745,22 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                 if 'switch' in self.train_type:
                     # Switch between giving left and right ALM no input (just noise) or both get input
                     # Here, can also switch between giving 0.2 or 0.5 input instead of 0
-                    random_bits_left = np.random.randint(0, 2, size=(n_trials, 1, 1))
-                    constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
-                    random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))
-                    constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+                    probs = [1/3, 1/3, 1/3]
+                    pairs = [(1, 1), (1, 0), (0, 1)]
 
+                    choices = np.random.choice(len(pairs), size=n_trials, p=probs)
+                    switch_bits = np.array([pairs[i] for i in choices])
+
+                    # random_bits_left = np.random.randint(0, 2, size=(n_trials, 1, 1))
+                    # constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
+                    # random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))
+                    # constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+
+                    random_bits_left = switch_bits[:,0].reshape(n_trials,1,1)
+                    constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
+                    random_bits_right = switch_bits[:,1].reshape(n_trials,1,1)
+                    constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+                    
                     # Noise variable
                     # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
                     scaling_factors_left = np.where(random_bits_left == 0, 1.0, self.sigma_input_noise).astype(np.float32)

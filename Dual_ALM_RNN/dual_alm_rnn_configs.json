@@ -32,7 +32,7 @@
     "xs_left_alm_amp":1.0,
     "xs_right_alm_amp":1.0,
     "across_hemi_n_epochs":0,
-    "init_cross_hemi_rel_factor":0.2,
+    "init_cross_hemi_rel_factor":0.7,
 
 
     "unfix_epoch":0,
