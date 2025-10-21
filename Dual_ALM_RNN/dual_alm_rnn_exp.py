@@ -1294,13 +1294,13 @@ class DualALMRNNExp(object):
             test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_simple.npy' if self.configs['one_hot'] else 'sensory_inputs.npy'))
             test_trial_type_labels = np.load(os.path.join(test_save_path, 'trial_type_labels_simple.npy' if not self.configs['one_hot'] else 'onehot_trial_type_labels_simple.npy'))
 
-        elif 'switch' in train_type:
-            train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_same_noise.npy'))
-            train_trial_type_labels = np.load(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'))
-            val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_same_noise.npy'))
-            val_trial_type_labels = np.load(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'))
-            test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_same_noise.npy'))
-            test_trial_type_labels = np.load(os.path.join(test_save_path, 'onehot_trial_type_labels.npy'))
+        # elif 'switch' in train_type:
+        #     train_sensory_inputs = np.load(os.path.join(train_save_path, 'onehot_sensory_inputs_same_noise.npy'))
+        #     train_trial_type_labels = np.load(os.path.join(train_save_path, 'onehot_trial_type_labels.npy'))
+        #     val_sensory_inputs = np.load(os.path.join(val_save_path, 'onehot_sensory_inputs_same_noise.npy'))
+        #     val_trial_type_labels = np.load(os.path.join(val_save_path, 'onehot_trial_type_labels.npy'))
+        #     test_sensory_inputs = np.load(os.path.join(test_save_path, 'onehot_sensory_inputs_same_noise.npy'))
+        #     test_trial_type_labels = np.load(os.path.join(test_save_path, 'onehot_trial_type_labels.npy'))
 
         else:
 
@@ -1508,6 +1508,7 @@ class DualALMRNNExp(object):
 
 
                         # train all trial types all the time
+                        print("Switch input seen by hemispheres, interleave trials")
 
                         train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_cross_hemi, epoch, loss_fct) # Per each training batch.
                         
@@ -2580,7 +2581,7 @@ class DualALMRNNExp(object):
     def get_neurons_trace(self, model, device, loader, model_type, 
                         hemi_type='left_ALM', recompute=False, return_pred_labels=False,
                         return_zs=False, hemi_agree=True, corrupt=False,
-                        single_readout=False):
+                        single_readout=False, switch=None):
         '''
         Return:
         numpy arrays
@@ -2623,7 +2624,29 @@ class DualALMRNNExp(object):
                 zs: (n_trials, T, 1) if single_readout
                 '''
 
-                hs, zs = model(inputs)
+                if switch is None:
+                    model.return_input=False
+                    hs, zs = model(inputs)
+                else: # only return for left or right input only trials
+                    model.return_input=True
+                    (left_input, right_input), hs, zs = model(inputs)
+                    left_first = left_input[:,0,0].cpu().numpy()
+                    right_first = right_input[:,0,0].cpu().numpy()
+
+                    left_only_mask = (left_first == 1) & (right_first == 0)
+                    right_only_mask = (left_first == 0) & (right_first == 1)
+
+
+                    if switch == 'left':
+                        hs = hs[left_only_mask]
+                        labels = labels[left_only_mask]
+                    elif switch == 'right':
+                        hs = hs[right_only_mask]
+                        labels = labels[right_only_mask]
+                    else:
+                        raise ValueError(f"Invalid switch value: {switch}")
+                    
+                    model.return_input=False
 
 
                 n_neurons = hs.shape[2]
@@ -2682,7 +2705,7 @@ class DualALMRNNExp(object):
 
         
 
-    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False, corrupt=False, asymmetric=False):
+    def eval_with_perturbations(self, model, device, loader, model_type, n_control=None, seed=None, control_only=False, single_readout=False, corrupt=False, asymmetric=False, switch=False):
         """
         Evaluate model accuracy under:
         - Control (no perturbation)
@@ -2699,7 +2722,8 @@ class DualALMRNNExp(object):
             seed: optional RNG seed for reproducibility of any shuffling
             control_only: if True, only evaluate control condition
             single_readout: if True, use single readout protocol and skip CD
-        
+            switch: if True, use switch protocol and calculate for l vs r input only
+
         Returns:
             dict with accuracy scores for each condition
         """
@@ -2722,10 +2746,12 @@ class DualALMRNNExp(object):
                 cds[j] = cds[j]/np.linalg.norm(cds[j]) # (n_neurons in a given hemi)
 
             cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
+        
+        switch_model = 'switch' in model.train_type
 
         results = {}
 
-        def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None, corrupt_state=False):
+        def per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, n_control=None, corrupt_state=False, train_type=None, switch=None):
             # Get all-neuron labels for reference
             _, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, single_readout=single_readout, corrupt=corrupt_state)
             if n_control is not None and len(all_labels) > n_control:
@@ -2736,7 +2762,12 @@ class DualALMRNNExp(object):
 
             if single_readout:
 
-                allhs, _, _ = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=True, hemi_agree=False, single_readout=single_readout, corrupt=corrupt_state)
+                if train_type is None and switch_model and switch is None: # only need to set for switch experiment. otherwise don't touch
+                    model.train_type = "train_type_modular_fixed_input_cross_hemi" # Control condition
+                elif train_type is not None and switch_model: # only modfiy for the switch experiment 
+                    model.train_type = train_type
+
+                allhs, all_labels = self.get_neurons_trace(model, device, loader, model_type, hemi_type='all', return_pred_labels=False, hemi_agree=False, single_readout=single_readout, corrupt=corrupt_state, switch=switch)
 
                 bias = model.readout_linear.bias.data.cpu().numpy()[0]
                 # import pdb; pdb.set_trace()
@@ -2751,6 +2782,7 @@ class DualALMRNNExp(object):
                     left_pred_labels = allhs[:, -1, :model.n_neurons//2].dot(readout_left_weight.flatten()) + bias >= 0
                     right_pred_labels = allhs[:, -1, model.n_neurons//2:].dot(readout_right_weight.flatten()) + bias >= 0
 
+                indices = np.arange(len(all_labels))
 
                 left_readout_acc = np.mean(all_labels[indices] == left_pred_labels[indices])
                 right_readout_acc = np.mean(all_labels[indices] == right_pred_labels[indices])
@@ -2772,13 +2804,13 @@ class DualALMRNNExp(object):
                 right_cd_acc = self._calculate_cd_accuracy_single_hemi(right_hs[indices], all_labels[indices], cds[1], cd_dbs[1])
 
             return {
-                'readout_accuracy_left': left_readout_acc,
-                'readout_accuracy_right': right_readout_acc,
-                'cd_accuracy_left': left_cd_acc,
-                'cd_accuracy_right': right_cd_acc,
-                'n_trials_agreed': np.sum(left_pred_labels[indices] == right_pred_labels[indices]),
-                'n_trials': len(indices)
-            }
+                        'readout_accuracy_left': left_readout_acc,
+                        'readout_accuracy_right': right_readout_acc,
+                        'cd_accuracy_left': left_cd_acc,
+                        'cd_accuracy_right': right_cd_acc,
+                        'n_trials_agreed': np.sum(left_pred_labels[indices] == right_pred_labels[indices]),
+                        'n_trials': len(indices)
+                    }
 
         # 1. Control condition (no perturbation) - always evaluate with corrupt=False first
         print("Evaluating control condition (corrupt=False)...")
@@ -2818,6 +2850,18 @@ class DualALMRNNExp(object):
             model.uni_pert_trials_prob = 1.0
             model.left_alm_pert_prob = 0.0
             results['right_alm_pert'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs)
+        # import pdb; pdb.set_trace()
+        if switch_model:
+            # 4. Switch condition
+            print("Evaluating left input only condition...")
+            model.uni_pert_trials_prob = 0
+            model.left_alm_pert_prob = 0.5
+            results['left_input_only'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, train_type="train_type_modular_fixed_input_cross_hemi_switch", switch='left')
+
+            print("Evaluating right input only condition...")
+            model.uni_pert_trials_prob = 0
+            model.left_alm_pert_prob = 0.5
+            results['right_input_only'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, train_type="train_type_modular_fixed_input_cross_hemi_switch", switch='right')
 
         # 4. Bilateral photoinhibition (both left and right ALM)
         # print("Evaluating bilateral photoinhibition...")

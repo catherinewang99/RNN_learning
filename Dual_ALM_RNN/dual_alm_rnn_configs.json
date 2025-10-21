@@ -5,12 +5,12 @@
     "plots_dir": "dual_alm_rnn_plots",
     "results_dir": "dual_alm_rnn_results",
     "model_type":"TwoHemiRNNTanh_single_readout",
-    "train_type":"train_type_modular_fixed_input_cross_hemi",
+    "train_type":"train_type_modular_fixed_input_cross_hemi_switch",
     "use_cuda":1,
     "gpu_ids":[0],
     "bs":256,
     "lr":1e-4,
-    "n_epochs":40,
+    "n_epochs":45,
     "log_interval":10,
     "num_workers":0,
     "pin_memory":0,
@@ -19,7 +19,7 @@
     "sigma_rec_noise":0.1,
     "test_sigma_input_noise":0.1,
     "test_sigma_rec_noise":0.1, 
-    "random_seed":0,
+    "random_seed":2,
     "dataset_random_seed":111,
     "test_random_seed":777,
     "uni_pert_trials_prob":0,
@@ -44,5 +44,5 @@
     "corruption_noise": 0.5,
     "corruption_type":"gaussian",
 
-    "one_hot":0
+    "one_hot":1
 }
