@@ -111,7 +111,7 @@ class DualALMRNNExp(object):
                 'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
         elif 'switch' in train_type:
             self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']), \
-                'switch_epoch_n_{}'.format(self.configs['switch_epoch_n']),\
+                'switch_epoch_n_{}_ps_{}'.format(self.configs['switch_epoch_n'], self.configs['switch_ps'][0]),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
                 'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
                 'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
@@ -2635,7 +2635,7 @@ class DualALMRNNExp(object):
 
                     left_only_mask = (left_first == 1) & (right_first == 0)
                     right_only_mask = (left_first == 0) & (right_first == 1)
-
+                    no_input_mask = (left_first == 0) & (right_first == 0)
 
                     if switch == 'left':
                         hs = hs[left_only_mask]
@@ -2643,6 +2643,9 @@ class DualALMRNNExp(object):
                     elif switch == 'right':
                         hs = hs[right_only_mask]
                         labels = labels[right_only_mask]
+                    elif switch == 'none':
+                        hs = hs[no_input_mask]
+                        labels = labels[no_input_mask]
                     else:
                         raise ValueError(f"Invalid switch value: {switch}")
                     
@@ -2862,6 +2865,11 @@ class DualALMRNNExp(object):
             model.uni_pert_trials_prob = 0
             model.left_alm_pert_prob = 0.5
             results['right_input_only'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, train_type="train_type_modular_fixed_input_cross_hemi_switch", switch='right')
+
+            print("Evaluating no input condition...")
+            model.uni_pert_trials_prob = 0
+            model.left_alm_pert_prob = 0.5
+            results['no_input'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, train_type="train_type_modular_fixed_input_cross_hemi_switch", switch='none')
 
         # 4. Bilateral photoinhibition (both left and right ALM)
         # print("Evaluating bilateral photoinhibition...")

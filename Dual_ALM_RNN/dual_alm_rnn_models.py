@@ -526,6 +526,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
         self.uni_pert_trials_prob = configs['uni_pert_trials_prob']
         self.left_alm_pert_prob = configs['left_alm_pert_prob']
+        self.switch_ps = configs['switch_ps']
 
         self.train_type = configs['train_type']
 
@@ -557,7 +558,6 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
         self.readout_linear = nn.Linear(self.n_neurons, 1)
 
-        self.init_params()
 
         self.drop_p_min = configs['drop_p_min']
         self.drop_p_max = configs['drop_p_max']
@@ -576,6 +576,14 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             self.corruption_start_epoch = configs['corruption_start_epoch']
             self.corruption_noise = configs['corruption_noise']
             self.corruption_type = configs['corruption_type']
+
+
+        if 'cluster' in configs['train_type']:
+            print("here in cluster")
+            self.l_num_cluster, self.r_num_cluster = configs['num_cluster']
+
+        self.init_params()
+
 
 
 
@@ -636,6 +644,12 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         else:
             init.normal_(self.readout_linear.weight, 0.0, 1.0/math.sqrt(self.n_neurons))
         init.constant_(self.readout_linear.bias, 0.0)
+
+        # initialize clusters if applicable
+        if 'cluster' in self.configs['train_type']:
+            # assign every neuron a cluster
+            self.l_clusters = np.random.randint(0, self.l_num_cluster, size=(self.n_left_neurons))
+            self.r_clusters = np.random.randint(0, self.r_num_cluster, size=(self.n_right_neurons))
 
     def apply_pert(self, h, left_pert_trial_inds, right_pert_trial_inds):
         '''
@@ -745,8 +759,9 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                 if 'switch' in self.train_type:
                     # Switch between giving left and right ALM no input (just noise) or both get input
                     # Here, can also switch between giving 0.2 or 0.5 input instead of 0
-                    probs = [1/3, 1/3, 1/3]
-                    pairs = [(1, 1), (1, 0), (0, 1)]
+                    probs = self.switch_ps
+                    pairs = [(1, 1), (1, 0), (0, 1), (0, 0)]
+                    shape = (n_trials, T, 2) if self.one_hot else (n_trials, T, 1)
 
                     choices = np.random.choice(len(pairs), size=n_trials, p=probs)
                     switch_bits = np.array([pairs[i] for i in choices])
@@ -757,9 +772,9 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                     # constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
 
                     random_bits_left = switch_bits[:,0].reshape(n_trials,1,1)
-                    constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
+                    constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, shape)).float().to(xs.device)
                     random_bits_right = switch_bits[:,1].reshape(n_trials,1,1)
-                    constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+                    constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, shape)).float().to(xs.device)
                     
                     # Noise variable
                     # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
@@ -775,6 +790,29 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                     
                     xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
                     xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+
+                elif 'cluster' in self.train_type:
+                    signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm) 
+                    signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 1) # can increase noise here
+                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 1)
+
+                    xs_injected_left_alm = noise_left_alm
+                    xs_injected_right_alm = noise_right_alm
+
+                    # based on the n number of clusters, drop all others (add noise) randomly on each trial, separately for left and right
+                    l_trial_clusters=np.random.randint(0, self.l_num_cluster, size=(n_trials))
+                    r_trial_clusters=np.random.randint(0, self.r_num_cluster, size=(n_trials))
+
+                    for n in range(self.l_num_cluster):
+                        trial_cluster_mask = l_trial_clusters == n
+                        neuron_cluster_mask = self.l_clusters == n
+                        xs_injected_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)] = signal_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)]
+                    
+                    for n in range(self.r_num_cluster):
+                        trial_cluster_mask = r_trial_clusters == n
+                        neuron_cluster_mask = self.r_clusters == n
+                        xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
 
                 elif 'dropout' in self.train_type:
                     m = nn.Dropout(p=self.dropout_p)
