@@ -694,6 +694,49 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
         # right pertubation
         h[np.nonzero(right_pert_mask)] = 0
 
+    def apply_cluster_pert(self, h, left_pert_trial_inds, right_pert_trial_inds, cluster):
+        '''
+        For each trial, we sample drop_p from [drop_p_min, drop_p_max]. Then, sample drop_p fraction of neurons to silence during the stim period.
+        '''
+        n_trials, n_neurons = h.size()
+
+
+        '''
+        Construct left_pert_mask
+        '''
+        n_left_pert_trials = len(left_pert_trial_inds)
+
+        left_pert_drop_ps = np.random.uniform(self.drop_p_min, self.drop_p_max, n_left_pert_trials) # (n_left_per_trials)
+
+        left_pert_mask = np.zeros((n_trials, n_neurons), dtype=bool)
+        left_cluster_mask = self.l_clusters == cluster
+
+        for i in range(n_left_pert_trials):
+            cur_drop_p = left_pert_drop_ps[i]
+            left_pert_neuron_inds = np.random.permutation(self.n_left_neurons[left_cluster_mask])[:int(self.n_left_neurons[left_cluster_mask]*cur_drop_p)]
+            left_pert_mask[left_pert_trial_inds[i],self.left_alm_inds[left_cluster_mask][left_pert_neuron_inds]] = True
+
+        '''
+        Construct right_pert_mask
+        '''
+        n_right_pert_trials = len(right_pert_trial_inds)
+
+        right_pert_drop_ps = np.random.uniform(self.drop_p_min, self.drop_p_max, n_right_pert_trials) # (n_right_per_trials)
+
+        right_pert_mask = np.zeros((n_trials, n_neurons), dtype=bool)
+        right_cluster_mask = self.r_clusters == cluster
+        
+        for i in range(n_right_pert_trials):
+            cur_drop_p = right_pert_drop_ps[i]
+            right_pert_neuron_inds = np.random.permutation(self.n_right_neurons[right_cluster_mask])[:int(self.n_right_neurons[right_cluster_mask]*cur_drop_p)]
+            right_pert_mask[right_pert_trial_inds[i],self.right_alm_inds[right_cluster_mask][right_pert_neuron_inds]] = True
+
+
+        # left pertubation
+        h[np.nonzero(left_pert_mask)] = 0
+
+        # right pertubation
+        h[np.nonzero(right_pert_mask)] = 0
 
 
     def forward(self, xs):
@@ -794,8 +837,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                 elif 'cluster' in self.train_type:
                     signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm) 
                     signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
-                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 1) # can increase noise here
-                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 1)
+                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0) # can increase noise here
+                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0)
 
                     xs_injected_left_alm = noise_left_alm
                     xs_injected_right_alm = noise_right_alm
@@ -881,6 +924,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                 # (xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp), hs, zs # xs: (n_trials, T, 1) or (n_trials, T, 2)
             elif 'switch' in self.train_type:
                 return (constant_01_rows_left, constant_01_rows_right), hs, zs
+            elif 'cluster' in self.train_type:
+                return (xs_injected_left_alm, xs_injected_right_alm), hs, zs
             else:
                 return (xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm,
                 xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm), hs, zs

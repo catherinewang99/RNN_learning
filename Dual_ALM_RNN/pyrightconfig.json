@@ -1,0 +1,14 @@
+{
+    "exclude": [
+      "**/__pycache__",
+      "**/node_modules", 
+      "**/.git",
+      "**/dual_alm_rnn_logs",
+      "**/dual_alm_rnn_models",
+      "**/figs",
+      "**/test",
+      "**/small_rnn_random_seed_*",
+      "**/*.pdf",
+      "**/*.png"
+    ]
+  }

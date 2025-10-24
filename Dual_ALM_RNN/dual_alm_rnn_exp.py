@@ -2879,6 +2879,15 @@ class DualALMRNNExp(object):
             model.left_alm_pert_prob = 0.5
             results['no_input'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, train_type="train_type_modular_fixed_input_cross_hemi_switch", switch='none')
 
+        # if 'cluster' in model.train_type:
+        #     # Ablate each cluster and test accuracy OR test each cluster independently
+        #     for l_cluster in range(model.l_num_cluster):
+        #         for r_cluster in range(model.r_num_cluster):
+        #             print(f"Evaluating cluster {l_cluster} {r_cluster}...")
+        #             model.uni_pert_trials_prob = 0
+        #             model.left_alm_pert_prob = 0.5
+        #             results[f'cluster_L{l_cluster}_R{r_cluster}'] = per_hemi_metrics(model, device, loader, model_type, cds, cd_dbs, train_type="train_type_modular_fixed_input_cross_hemi_cluster", cluster=(l_cluster, r_cluster))
+
         # 4. Bilateral photoinhibition (both left and right ALM)
         # print("Evaluating bilateral photoinhibition...")
         # bilateral_pert_hs, bilateral_pert_labels, _ = self._apply_bilateral_perturbation(
