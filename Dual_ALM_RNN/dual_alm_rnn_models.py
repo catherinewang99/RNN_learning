@@ -823,11 +823,10 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                     random_bits_right = switch_bits[:,1].reshape(n_trials,1,1)
                     constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, shape)).float().to(xs.device)
 
-                    noise_scale = 1.0
+                    noise_scale = self.graded_noise_scale
                     signal_scale = self.graded_signal_scale
 
                     if 'graded' in self.train_type: # instead of 0/1 extremes, provide a diminished signal to the other hemisphere (x0.2 for example)
-                        noise_scale = self.graded_noise_scale
                         # Create a noise scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
                         scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
                         scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)

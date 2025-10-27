@@ -40,7 +40,7 @@
     "dropout_p":0.5,
     "switch_ps":[0.25, 0.25, 0.25, 0.25],
     "graded_signal_scale":0.5,
-    "graded_noise_scale":0.1,
+    "graded_noise_scale":0.5,
 
     "num_cluster":[2,2],
 
