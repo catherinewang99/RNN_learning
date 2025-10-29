@@ -803,7 +803,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
             if self.noise:
 
-                if 'switch' in self.train_type:
+                if 'switch' in self.train_type and 'cluster' not in self.train_type:
                     # Switch between giving left and right ALM no input (just noise) or both get input
                     # Here, can also switch between giving 0.2 or 0.5 input instead of 0
                     probs = self.switch_ps
@@ -886,6 +886,10 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         trial_cluster_mask = r_trial_clusters == n
                         neuron_cluster_mask = self.r_clusters == n
                         xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
+
+
+                    if 'switch' in self.train_type:
+                        continue
 
                 elif 'dropout' in self.train_type:
                     m = nn.Dropout(p=self.dropout_p)

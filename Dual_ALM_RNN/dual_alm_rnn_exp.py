@@ -134,7 +134,7 @@ class DualALMRNNExp(object):
                     'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
                     'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
                     'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
-                    
+
         elif 'asymmetric_fix' in train_type or 'train_type_modular_fixed_input_cross_hemi' in train_type:
             self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']), \
                 'unfix_epoch_{}'.format(self.configs['unfix_epoch']),\
@@ -2769,6 +2769,7 @@ class DualALMRNNExp(object):
             cd_dbs = self.get_cd_dbs(cds, model, device, loader, model_type, recompute=False)
         
         switch_model = 'switch' in model.train_type
+        cluster_model = 'cluster' in model.train_type
 
         results = {}
 
@@ -2782,7 +2783,8 @@ class DualALMRNNExp(object):
 
 
             if single_readout:
-
+                if cluster_model:
+                    model.train_type = "train_type_modular_fixed_input_cross_hemi"
                 if train_type is None and switch_model and switch is None: # only need to set for switch experiment. otherwise don't touch
                     model.train_type = "train_type_modular_fixed_input_cross_hemi" # Control condition
                 elif train_type is not None and switch_model: # only modfiy for the switch experiment 
