@@ -582,9 +582,9 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             print("here in cluster")
             self.l_num_cluster, self.r_num_cluster = configs['num_cluster']
             
-        if 'graded' in configs['train_type']:
-            self.graded_signal_scale = configs['graded_signal_scale']
-            self.graded_noise_scale = configs['graded_noise_scale']
+        # if 'graded' in configs['train_ty pe']:
+        self.graded_signal_scale = configs['graded_signal_scale']
+        self.graded_noise_scale = configs['graded_noise_scale']
 
         self.init_params()
 
@@ -803,7 +803,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
             if self.noise:
 
-                if 'switch' in self.train_type and 'cluster' not in self.train_type:
+                if 'switch' in self.train_type:
                     # Switch between giving left and right ALM no input (just noise) or both get input
                     # Here, can also switch between giving 0.2 or 0.5 input instead of 0
                     probs = self.switch_ps
@@ -848,6 +848,44 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left_signal + xs_noise_left_alm)
                         xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right_signal + xs_noise_right_alm)
 
+                    elif 'cluster' in self.train_type: # Switch and cluster
+
+                        # Noise variable
+                        # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
+                        scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                        scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                        # Broadcast to shape (1000, 100, 2)
+                        scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
+                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                        xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+
+                        scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
+                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                        xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                        
+                        signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
+                        signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+                        noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0) # can increase noise here
+                        noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0)
+
+                        xs_injected_left_alm = noise_left_alm
+                        xs_injected_right_alm = noise_right_alm
+
+                        # based on the n number of clusters, drop all others (add noise) randomly on each trial, separately for left and right
+                        l_trial_clusters=np.random.randint(0, self.l_num_cluster, size=(n_trials))
+                        r_trial_clusters=np.random.randint(0, self.r_num_cluster, size=(n_trials))
+
+                        for n in range(self.l_num_cluster):
+                            trial_cluster_mask = l_trial_clusters == n
+                            neuron_cluster_mask = self.l_clusters == n
+                            xs_injected_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)] = signal_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)]
+                        
+                        for n in range(self.r_num_cluster):
+                            trial_cluster_mask = r_trial_clusters == n
+                            neuron_cluster_mask = self.r_clusters == n
+                            xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
+
+
                     else:
                         # Noise variable
                         # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
@@ -887,9 +925,6 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         neuron_cluster_mask = self.r_clusters == n
                         xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
 
-
-                    if 'switch' in self.train_type:
-                        continue
 
                 elif 'dropout' in self.train_type:
                     m = nn.Dropout(p=self.dropout_p)
