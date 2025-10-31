@@ -865,7 +865,7 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         
                         signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
                         signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
-                        noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0) # can increase noise here
+                        noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0) # can increase noise here - should match to noise_scale?
                         noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0)
 
                         xs_injected_left_alm = noise_left_alm
@@ -887,14 +887,15 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
 
 
                     else:
-                        # Noise variable
+                        # Noise variable # noise should be set to 1 here
+                        noise_scale = 1.0
                         # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
                         scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
                         scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
                         # Broadcast to shape (1000, 100, 2)
                         scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
                         scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                        xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor # multiply by 1 here so effectively SD=1 
                         scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
                         scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
                         xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
@@ -905,8 +906,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                 elif 'cluster' in self.train_type:
                     signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm) 
                     signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
-                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0) # can increase noise here
-                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0)
+                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0.1) # can increase noise here
+                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0.1)
 
                     xs_injected_left_alm = noise_left_alm
                     xs_injected_right_alm = noise_right_alm
