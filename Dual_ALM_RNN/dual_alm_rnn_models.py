@@ -865,8 +865,8 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         
                         signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
                         signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
-                        noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0) # can increase noise here - should match to noise_scale?
-                        noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0)
+                        noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * noise_scale) # can increase noise here - should match to noise_scale?
+                        noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * noise_scale)
 
                         xs_injected_left_alm = noise_left_alm
                         xs_injected_right_alm = noise_right_alm
@@ -904,10 +904,24 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
 
                 elif 'cluster' in self.train_type:
-                    signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm) 
-                    signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
-                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0.1) # can increase noise here
-                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * 0.1)
+
+                    if 'balanced' in self.train_type:
+                        signal_balance = self.l_num_cluster / self.r_num_cluster if self.l_num_cluster > self.r_num_cluster else self.r_num_cluster / self.l_num_cluster
+                        # print('balancing signals by factor of', signal_balance)
+                        if self.l_num_cluster > self.r_num_cluster: # e.g. 4 L vs 2 R
+                            signal_left_alm_amp = self.xs_left_alm_amp 
+                            signal_right_alm_amp = self.xs_right_alm_amp / signal_balance
+                        else:
+                            signal_left_alm_amp = self.xs_left_alm_amp / signal_balance
+                            signal_right_alm_amp = self.xs_right_alm_amp 
+                    else:
+                        signal_left_alm_amp = self.xs_left_alm_amp
+                        signal_right_alm_amp = self.xs_right_alm_amp
+
+                    signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*signal_left_alm_amp + xs_noise_left_alm) 
+                    signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*signal_right_alm_amp + xs_noise_right_alm)
+                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * self.graded_noise_scale) # can increase noise here
+                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * self.graded_noise_scale)
 
                     xs_injected_left_alm = noise_left_alm
                     xs_injected_right_alm = noise_right_alm

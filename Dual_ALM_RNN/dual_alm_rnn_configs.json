@@ -38,11 +38,11 @@
     "unfix_epoch":0,
     "switch_epoch_n":0,
     "dropout_p":0.5,
-    "switch_ps":[0.25, 0.25, 0.25, 0.25],
-    "graded_signal_scale":1.0,
-    "graded_noise_scale":0.75,
+    "switch_ps":[0.7, 0.1, 0.1, 0.1],
+    "graded_signal_scale":0.0,
+    "graded_noise_scale":1.0,
 
-    "num_cluster":[50,50],
+    "num_cluster":[4,2],
 
 
     "corruption_start_epoch":15,

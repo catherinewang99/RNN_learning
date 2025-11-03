@@ -114,6 +114,7 @@ class DualALMRNNExp(object):
             else:
                 self.sub_path = os.path.join(train_type, 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']), \
                     'Lcluster_{}_Rcluster_{}'.format(self.configs['num_cluster'][0], self.configs['num_cluster'][1]),\
+                    'signal_{}_noise_{}'.format(self.configs['graded_signal_scale'], self.configs['graded_noise_scale']),\
                     'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
                     'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
                     'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
