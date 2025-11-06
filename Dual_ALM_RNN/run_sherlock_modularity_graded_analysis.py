@@ -48,7 +48,7 @@ graded_noise_scales = [0.1, 0.5, 1.0]
 # Create an outer dictionary to hold all results for each seed and cross_hemi
 results = {}
 
-for seed in range(50):
+for seed in range(29):
     results[seed] = {}
     for graded_noise_scale in graded_noise_scales:
         exp.configs['train_type'] = 'train_type_modular_fixed_input_cross_hemi_switch_graded'
@@ -58,7 +58,7 @@ for seed in range(50):
         exp.configs['random_seed'] = seed
         exp.configs['unfix_epoch'] = 0
         exp.configs['init_cross_hemi_rel_factor'] = 0.5
-        exp.configs['graded_signal_scale'] = 0.5
+        exp.configs['graded_signal_scale'] = 0.2
         exp.configs['graded_noise_scale'] = graded_noise_scale
         exp.configs['bs'] = 256
         exp.configs['n_neurons'] = 256
@@ -174,7 +174,7 @@ for seed in range(50):
             "all_dip_sem": all_dip_sem,
         }
 
-np.save('/scratch/users/cwang314/sherlock_modularity_graded_analysis.npy', results)
+np.save('/scratch/users/cwang314/sherlock_modularity_graded0p2_analysis.npy', results)
 
 
 
