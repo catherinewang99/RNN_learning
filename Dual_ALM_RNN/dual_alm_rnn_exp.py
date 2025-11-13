@@ -1846,6 +1846,8 @@ class DualALMRNNExp(object):
 
 
 
+
+
     def plot_weights_changes(self, sub_sample=20):
         """
         Analyze and plot weight evolution over training epochs
