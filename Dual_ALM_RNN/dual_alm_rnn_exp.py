@@ -77,7 +77,16 @@ class DualALMRNNExp(object):
         self.logs_save_path = logs_save_path
 
     def init_sub_path(self, train_type):
-        if 'train_type_modular_corruption' in train_type and not self.one_hot:
+        if 'no_grad' in train_type:
+            self.sub_path = os.path.join(train_type, 
+                'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
+                'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
+                'lr_{:.1e}_bs_{}'.format(self.configs['lr'], self.configs['bs']),\
+                'sigma_input_noise_{:.2f}_sigma_rec_noise_{:.2f}'.format(self.configs['sigma_input_noise'], self.configs['sigma_rec_noise']),\
+                'xs_left_alm_amp_{:.2f}_right_alm_amp_{:.2f}'.format(self.configs['xs_left_alm_amp'], self.configs['xs_right_alm_amp']),\
+                'init_cross_hemi_rel_factor_{:.2f}'.format(self.configs['init_cross_hemi_rel_factor']))
+
+        elif 'train_type_modular_corruption' in train_type and not self.one_hot:
             self.sub_path = os.path.join(train_type, 'cor_type_{}_epoch_{}_noise_{:.2f}'.format(self.configs['corruption_type'], self.configs['corruption_start_epoch'], self.configs['corruption_noise']),\
                 'n_neurons_{}_random_seed_{}'.format(self.configs['n_neurons'], self.configs['random_seed']),\
                 'n_epochs_{}_n_epochs_across_hemi_{}'.format(self.configs['n_epochs'], self.configs['across_hemi_n_epochs']),\
@@ -1382,17 +1391,20 @@ class DualALMRNNExp(object):
 
         params_fixed_within_hemi = []
         params_fixed_within_hemi_cross_hemi = []
+        no_grad_params = {}
 
         for name, param in model.named_parameters():
             if 'fixed_input' in train_type:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name):
                     params_within_hemi.append(param)
+                    no_grad_params[name] = param
                     params_within_hemi_and_cross_hemi.append(param)
                     params_within_hemi_and_lefttoright.append(param)
                     params_within_hemi_and_righttoleft.append(param)
                 if 'cross_hemi' in train_type: # train the cross hemi weights as well as the within hemi weights
                     if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                         params_within_hemi_and_cross_hemi.append(param)
+                        no_grad_params[name] = param
                         if '_rl' in name:
                             params_within_hemi_and_righttoleft.append(param)
                         if '_lr' in name:
@@ -1407,14 +1419,12 @@ class DualALMRNNExp(object):
                     if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                         params_fixed_within_hemi_cross_hemi.append(param)
 
-            else:
+            elif 'fixed_input' not in train_type:
                 if ('w_hh_linear_ll' in name) or ('w_hh_linear_rr' in name) or ('readout_linear' in name) or ('w_xh_linear_left_alm' in name) or ('w_xh_linear_right_alm' in name):
                     params_within_hemi.append(param)
 
             if ('w_hh_linear_lr' in name) or ('w_hh_linear_rl' in name):
                 params_cross_hemi.append(param)
-
-
 
         if 'asymmetric_fix' in train_type:
             optimizer_fixed_within_hemi = optim.Adam(params_fixed_within_hemi, lr=self.configs['lr'], weight_decay=self.configs['l2_weight_decay'])
@@ -1480,9 +1490,12 @@ class DualALMRNNExp(object):
             print('Within-hemi training')
 
             model.uni_pert_trials_prob = self.configs['uni_pert_trials_prob']
+           
+            if 'no_grad' in train_type:
+                # import pdb; pdb.set_trace()
+                train_losses, train_scores = self.train_helper_no_grad(model, device, train_loader, epoch, loss_fct, no_grad_params, perturbation_magnitude=self.configs['lr']) # No gradient descent, only training
 
-
-            if 'asymmetric_fix' in train_type:
+            elif 'asymmetric_fix' in train_type:
                 if epoch < self.configs['unfix_epoch']:
                     print('Set left RNN weights at epoch {} to 0'.format(epoch + 1))
                     model.rnn_cell.w_hh_linear_ll.weight.data = torch.tensor([
@@ -1545,8 +1558,10 @@ class DualALMRNNExp(object):
 
                         print('train the cross hemi weights at epoch {}'.format(epoch + 1))
                         train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_cross_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
+ 
+            
             else:
-                    train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
+                train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
             # total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
             # np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
               # After optimizer.step() and epoch ends
@@ -1766,6 +1781,182 @@ class DualALMRNNExp(object):
 
         return losses, scores
 
+    def _update_model_parameters(self, model_copy, params):
+        for name, param in params.items():
+            if 'readout_linear.bias' in name:
+                model_copy.readout_linear.bias.data = param
+            elif 'readout_linear.weight' in name:
+                model_copy.readout_linear.weight.data = param
+            elif 'w_hh_linear_ll.weight' in name:
+                model_copy.rnn_cell.w_hh_linear_ll.weight.data = param
+            elif 'w_hh_linear_rr.weight' in name:
+                model_copy.rnn_cell.w_hh_linear_rr.weight.data = param
+            elif 'w_hh_linear_lr.weight' in name:
+                model_copy.rnn_cell.w_hh_linear_lr.weight.data = param
+            elif 'w_hh_linear_rl.weight' in name:
+                model_copy.rnn_cell.w_hh_linear_rl.weight.data = param
+            elif 'w_hh_linear_ll.bias' in name:
+                model_copy.rnn_cell.w_hh_linear_ll.bias.data = param
+            elif 'w_hh_linear_rr.bias' in name:
+                model_copy.rnn_cell.w_hh_linear_rr.bias.data = param
+            elif 'w_hh_linear_lr.bias' in name:
+                model_copy.rnn_cell.w_hh_linear_lr.bias.data = param
+            elif 'w_hh_linear_rl.bias' in name:
+                model_copy.rnn_cell.w_hh_linear_rl.bias.data = param
+        return model_copy
+
+    def _compute_loss_for_batch(self, model, params, inputs, labels, loss_fct):
+        """
+        Helper function to compute loss for a given batch.
+        Used in zero-order optimization to evaluate loss at perturbed parameter values.
+        """
+        # Copy the model using deepcopy to preserve all attributes and state
+        import copy
+        model_copy = copy.deepcopy(model)
+        model_copy.to(next(model.parameters()).device)
+        model_copy.eval()
+
+        model_copy = self._update_model_parameters(model_copy, params)
+
+        with torch.no_grad():
+            hs, zs = model_copy(inputs)
+            
+            assert self.T == inputs.shape[1]
+            dec_begin = self.delay_begin
+            
+            # use a single readout model
+            if 'single_readout' in self.configs['model_type']:
+                # For single readout, zs is (n_trials, T, 1)
+                loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))
+            else:
+                # BCEWithLogitsLoss requires that the target be float between 0 and 1.
+                loss_left_alm = loss_fct(zs[:,dec_begin:,0], labels.float()[:,None].expand(-1,self.T-dec_begin))
+                loss_right_alm = loss_fct(zs[:,dec_begin:,1], labels.float()[:,None].expand(-1,self.T-dec_begin))
+                loss = loss_left_alm + loss_right_alm
+            
+            return loss.item()
+
+
+    def train_helper_no_grad(self, model, device, train_loader, epoch, loss_fct, 
+                             params_update, perturbation_magnitude=1e-3, learning_rate=None):
+        """
+        Zero-order optimization training using Duchi's two-point feedback method.
+        
+        Args:
+            model: The RNN model
+            device: Device to run on
+            train_loader: Data loader for training
+            epoch: Current epoch number
+            loss_fct: Loss function
+            params_update: Dict of parameters to update (list of torch.nn.Parameter)
+            perturbation_magnitude: δ - magnitude of perturbation for gradient estimation (default: 1e-3)
+            learning_rate: η - learning rate for parameter updates (default: uses configs['lr'])
+        """
+        model.eval()
+
+        losses = []
+        scores = []
+
+        trial_count = 0
+
+        begin_time = time.time()
+        
+        # Use learning rate from config if not provided
+        if learning_rate is None:
+            learning_rate = self.configs['lr']
+        
+        # Zero-order optimization: Duchi's two-point feedback method
+        for batch_idx, data in enumerate(train_loader):
+
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            trial_count += len(labels)
+
+            # ===== ZERO-ORDER OPTIMIZATION ALGORITHM =====
+            # Step 1: Save current parameter values
+            # current_params = [param.data.clone() for param in params_update]
+            current_params = {name: param.data.clone() for name, param in params_update.items()}
+
+            # Step 2: Generate random direction vectors u for each parameter
+            # Sample from standard normal and normalize to unit sphere (as per Duchi's method)
+            direction_vectors = {}
+            for name, param in params_update.items():
+                u = torch.randn_like(param.data)
+                # Normalize to unit sphere: u / ||u||
+                if param.data.shape[0] > 1:
+                    u_norm = u.norm()
+                    if u_norm > 0:
+                        u = u / u_norm
+                direction_vectors[name] = u
+            
+            # Step 3: Evaluate loss at θ + δu
+            with torch.no_grad():
+                for name, param in params_update.items():
+                    param.data = current_params[name] + perturbation_magnitude * direction_vectors[name]
+
+            loss_plus = self._compute_loss_for_batch(model, params_update, inputs, labels, loss_fct)
+            
+            # Step 4: Evaluate loss at θ - δu
+            with torch.no_grad():
+                for name, param in params_update.items():
+                    param.data = current_params[name] - perturbation_magnitude * direction_vectors[name]
+            
+            loss_minus = self._compute_loss_for_batch(model, params_update, inputs, labels, loss_fct)
+
+            # Step 5: Compute gradient estimate: ĝ = (f(θ+δu) - f(θ-δu)) / (2δ) * u
+            # Step 6: Update parameters: θ = θ - η * ĝ
+            with torch.no_grad():
+                for name, param in params_update.items():
+                    # Gradient estimate
+                    grad_estimate = ((loss_plus - loss_minus) / (2 * perturbation_magnitude)) * direction_vectors[name]
+                    # Parameter update
+                    param.data = current_params[name] - learning_rate * grad_estimate
+            # ===== END ZERO-ORDER OPTIMIZATION =====
+
+            # Evaluate the model with updated parameters for logging
+            model = self._update_model_parameters(model, params_update)
+
+            # Update parameters
+            with torch.no_grad():
+                hs, zs = model(inputs)
+                
+                assert self.T == inputs.shape[1]
+                dec_begin = self.delay_begin
+                
+                # Compute loss for logging
+                if 'single_readout' in self.configs['model_type']:
+                    loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))
+                else:
+                    loss_left_alm = loss_fct(zs[:,dec_begin:,0], labels.float()[:,None].expand(-1,self.T-dec_begin))
+                    loss_right_alm = loss_fct(zs[:,dec_begin:,1], labels.float()[:,None].expand(-1,self.T-dec_begin))
+                    loss = loss_left_alm + loss_right_alm
+                
+                # Evaluate the score
+                if 'single_readout' in self.configs['model_type']:
+                    preds = (zs[:,-1,0] >= 0).long()
+                    score = accuracy_score(labels.cpu().data.numpy(), preds.cpu().data.numpy())
+                else:
+                    preds_left_alm = (zs[:,-1,0] >= 0).long()
+                    preds_right_alm = (zs[:,-1,1] >= 0).long()
+                    
+                    score_left_alm = accuracy_score(labels.cpu().data.numpy(), preds_left_alm.cpu().data.numpy())
+                    score_right_alm = accuracy_score(labels.cpu().data.numpy(), preds_right_alm.cpu().data.numpy())
+                    
+                    score = (score_left_alm+score_right_alm)/2
+
+            losses.append(loss)
+            scores.append(score)
+            
+            if (batch_idx + 1) % self.configs['log_interval'] == 0:
+                cur_time = time.time()
+                print('Train Epoch: {} [{}/{} ({:.0f}%)] loss: {:.6f}, fraction correct: {:.1f}% ({:.3f} s)'.format(
+                    epoch + 1, trial_count, len(train_loader.dataset), 100. * (batch_idx + 1) / len(train_loader), \
+                    loss.item(), 100. * score, cur_time - begin_time))
+                begin_time = time.time()
+
+
+        return losses, scores
 
 
 
