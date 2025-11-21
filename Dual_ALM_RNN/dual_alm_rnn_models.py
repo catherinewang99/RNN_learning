@@ -772,156 +772,74 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
             xs_left_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_left_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
             xs_right_alm_mask = (torch.rand(n_trials,1,1) >= self.xs_right_alm_drop_p).float().to(xs.device)  # (n_trials, 1, 1)
 
-        if self.corrupt:
-            
-            corr_level = self.corruption_noise
-            if self.one_hot:
-                # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian to match the mean of the input
-                xs_noise_left_alm_corr = math.sqrt(2/self.a)*(torch.randn_like(xs)*corr_level + 0.0) # shift the mean of the gaussian to match the mean of the input
-
-            elif self.corruption_type == "poisson":
-                # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
-                xs_noise_left_alm_corr = math.sqrt(2/self.a)*torch.poisson(torch.ones_like(xs.cpu()) * corr_level).to(xs.device)
-
-            else:
-                xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
-
-            if self.noise:
-
-                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
-                # Keep right side unchanged
-                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
-            else:
-                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
-                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
-
-            # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp) # Multiply term outside of everything
-            # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
-
-        else:
-            # print("no corruption ", self.xs_left_alm_amp, self.xs_right_alm_amp)
-
-            if self.noise:
-
-                if 'switch' in self.train_type:
-                    # Switch between giving left and right ALM no input (just noise) or both get input
-                    # Here, can also switch between giving 0.2 or 0.5 input instead of 0
-                    probs = self.switch_ps
-                    pairs = [(1, 1), (1, 0), (0, 1), (0, 0)]
-                    shape = (n_trials, T, 2) if self.one_hot else (n_trials, T, 1)
-
-                    choices = np.random.choice(len(pairs), size=n_trials, p=probs)
-                    switch_bits = np.array([pairs[i] for i in choices])
-
-                    # random_bits_left = np.random.randint(0, 2, size=(n_trials, 1, 1))
-                    # constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
-                    # random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))
-                    # constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
-
-                    random_bits_left = switch_bits[:,0].reshape(n_trials,1,1)
-                    constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, shape)).float().to(xs.device)
-                    random_bits_right = switch_bits[:,1].reshape(n_trials,1,1)
-                    constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, shape)).float().to(xs.device)
-
-                    noise_scale = self.graded_noise_scale
-                    signal_scale = self.graded_signal_scale
-
-                    if 'graded' in self.train_type: # instead of 0/1 extremes, provide a diminished signal to the other hemisphere (x0.2 for example)
-                        # Create a noise scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
-                        scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
-                        scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
-                        signal_scaling_factors_left = np.where(random_bits_left == 0, signal_scale, self.xs_left_alm_amp).astype(np.float32)
-                        signal_scaling_factors_right = np.where(random_bits_right == 0, signal_scale, self.xs_right_alm_amp).astype(np.float32)
-
-                        constant_01_rows_left_signal = torch.from_numpy(np.broadcast_to(signal_scaling_factors_left, shape)).float().to(xs.device)
-                        constant_01_rows_right_signal = torch.from_numpy(np.broadcast_to(signal_scaling_factors_right, shape)).float().to(xs.device)
-
-                        # Broadcast to shape (1000, 100, 2)
-                        scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
-                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
-
-                        scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
-                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
-                        
-                        xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left_signal + xs_noise_left_alm)
-                        xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right_signal + xs_noise_right_alm)
-
-                    elif 'cluster' in self.train_type: # Switch and cluster
-
-                        # Noise variable
-                        # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
-                        scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
-                        scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
-                        # Broadcast to shape (1000, 100, 2)
-                        scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
-                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
-
-                        scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
-                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
-                        
-                        signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
-                        signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
-                        noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * noise_scale) # can increase noise here - should match to noise_scale?
-                        noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * noise_scale)
-
-                        xs_injected_left_alm = noise_left_alm
-                        xs_injected_right_alm = noise_right_alm
-
-                        # based on the n number of clusters, drop all others (add noise) randomly on each trial, separately for left and right
-                        l_trial_clusters=np.random.randint(0, self.l_num_cluster, size=(n_trials))
-                        r_trial_clusters=np.random.randint(0, self.r_num_cluster, size=(n_trials))
-
-                        for n in range(self.l_num_cluster):
-                            trial_cluster_mask = l_trial_clusters == n
-                            neuron_cluster_mask = self.l_clusters == n
-                            xs_injected_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)] = signal_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)]
-                        
-                        for n in range(self.r_num_cluster):
-                            trial_cluster_mask = r_trial_clusters == n
-                            neuron_cluster_mask = self.r_clusters == n
-                            xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
 
 
-                    else:
-                        # Noise variable # noise should be set to 1 here
-                        noise_scale = 1.0
-                        # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
-                        scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
-                        scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
-                        # Broadcast to shape (1000, 100, 2)
-                        scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
-                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor # multiply by 1 here so effectively SD=1 
-                        scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
-                        scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
-                        xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
-                        
-                        xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
-                        xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+        if self.noise:
 
-                elif 'cluster' in self.train_type:
+            if 'switch' in self.train_type:
+                # Switch between giving left and right ALM no input (just noise) or both get input
+                # Here, can also switch between giving 0.2 or 0.5 input instead of 0
+                probs = self.switch_ps
+                pairs = [(1, 1), (1, 0), (0, 1), (0, 0)]
+                shape = (n_trials, T, 2) if self.one_hot else (n_trials, T, 1)
 
-                    if 'balanced' in self.train_type:
-                        signal_balance = self.l_num_cluster / self.r_num_cluster if self.l_num_cluster > self.r_num_cluster else self.r_num_cluster / self.l_num_cluster
-                        # print('balancing signals by factor of', signal_balance)
-                        if self.l_num_cluster > self.r_num_cluster: # e.g. 4 L vs 2 R
-                            signal_left_alm_amp = self.xs_left_alm_amp 
-                            signal_right_alm_amp = self.xs_right_alm_amp / signal_balance
-                        else:
-                            signal_left_alm_amp = self.xs_left_alm_amp / signal_balance
-                            signal_right_alm_amp = self.xs_right_alm_amp 
-                    else:
-                        signal_left_alm_amp = self.xs_left_alm_amp
-                        signal_right_alm_amp = self.xs_right_alm_amp
+                choices = np.random.choice(len(pairs), size=n_trials, p=probs)
+                switch_bits = np.array([pairs[i] for i in choices])
 
-                    signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*signal_left_alm_amp + xs_noise_left_alm) 
-                    signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*signal_right_alm_amp + xs_noise_right_alm)
-                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * self.graded_noise_scale) # can increase noise here
-                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * self.graded_noise_scale)
+                # random_bits_left = np.random.randint(0, 2, size=(n_trials, 1, 1))
+                # constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, (n_trials, T, 2))).float().to(xs.device)
+                # random_bits_right = np.random.randint(0, 2, size=(n_trials, 1, 1))
+                # constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, (n_trials, T, 2))).float().to(xs.device)
+
+                random_bits_left = switch_bits[:,0].reshape(n_trials,1,1)
+                constant_01_rows_left = torch.from_numpy(np.broadcast_to(random_bits_left, shape)).float().to(xs.device)
+                random_bits_right = switch_bits[:,1].reshape(n_trials,1,1)
+                constant_01_rows_right = torch.from_numpy(np.broadcast_to(random_bits_right, shape)).float().to(xs.device)
+
+                noise_scale = self.graded_noise_scale
+                signal_scale = self.graded_signal_scale
+
+                if 'graded' in self.train_type: # instead of 0/1 extremes, provide a diminished signal to the other hemisphere (x0.2 for example)
+                    # Create a noise scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
+                    scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    signal_scaling_factors_left = np.where(random_bits_left == 0, signal_scale, self.xs_left_alm_amp).astype(np.float32)
+                    signal_scaling_factors_right = np.where(random_bits_right == 0, signal_scale, self.xs_right_alm_amp).astype(np.float32)
+
+                    constant_01_rows_left_signal = torch.from_numpy(np.broadcast_to(signal_scaling_factors_left, shape)).float().to(xs.device)
+                    constant_01_rows_right_signal = torch.from_numpy(np.broadcast_to(signal_scaling_factors_right, shape)).float().to(xs.device)
+
+                    # Broadcast to shape (1000, 100, 2)
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                    
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left_signal + xs_noise_left_alm)
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right_signal + xs_noise_right_alm)
+
+                elif 'cluster' in self.train_type: # Switch and cluster
+
+                    # Noise variable
+                    # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
+                    scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    # Broadcast to shape (1000, 100, 2)
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                    
+                    signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
+                    signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+                    noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * noise_scale) # can increase noise here - should match to noise_scale?
+                    noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * noise_scale)
 
                     xs_injected_left_alm = noise_left_alm
                     xs_injected_right_alm = noise_right_alm
@@ -940,26 +858,144 @@ class TwoHemiRNNTanh_single_readout(nn.Module):
                         neuron_cluster_mask = self.r_clusters == n
                         xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
 
+                elif self.corrupt: # switch + corrupt
+                    corr_level = self.corruption_noise
+                    if self.one_hot:
+                        # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian to match the mean of the input
+                        xs_noise_left_alm_corr = math.sqrt(2/self.a)*(torch.randn_like(xs)*corr_level + 0.0) 
+                    elif self.corruption_type == "poisson":
+                        # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
+                        xs_noise_left_alm_corr = math.sqrt(2/self.a)*torch.poisson(torch.ones_like(xs.cpu()) * corr_level).to(xs.device)
 
-                elif 'dropout' in self.train_type:
-                    m = nn.Dropout(p=self.dropout_p)
+                    else:
+                        xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
 
-                    xs_left_input = xs*xs_left_alm_mask*self.xs_left_alm_amp 
-                    xs_left_input = m(xs_left_input)  
-                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs_left_input + xs_noise_left_alm)
-                   
-                    xs_right_input = xs*xs_right_alm_mask*self.xs_right_alm_amp 
-                    xs_right_input = m(xs_right_input)  
-                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs_right_input + xs_noise_right_alm)
+                    # xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
+                    # # Keep right side unchanged
+                    # xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+
+                    # Noise variable # noise should be set to 1 here
+                    noise_scale = 1.0
+                    # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
+                    scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    
+                    # Broadcast to shape (1000, 100, 2)
+                    # scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
+                    # scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    # xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor # multiply by 1 here so effectively SD=1 
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                    
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm_corr)
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+
+
 
                 else:
-                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+                    # Noise variable # noise should be set to 1 here
+                    noise_scale = 1.0
+                    # Create a scaling factor array of shape (1000, 1, 1), value=1 when random_bits_left==0, value=sigma_input_noise when random_bits_left==1
+                    scaling_factors_left = np.where(random_bits_left == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    scaling_factors_right = np.where(random_bits_right == 0, noise_scale, self.sigma_input_noise).astype(np.float32)
+                    # Broadcast to shape (1000, 100, 2)
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_left, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_left_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor # multiply by 1 here so effectively SD=1 
+                    scaling_factors_exp = np.broadcast_to(scaling_factors_right, xs.shape)
+                    scaling_factors_tensor = torch.from_numpy(scaling_factors_exp).to(xs.device).type_as(xs)
+                    xs_noise_right_alm = math.sqrt(2/self.a) * torch.randn_like(xs) * scaling_factors_tensor
+                    
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*constant_01_rows_left + xs_noise_left_alm)
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*constant_01_rows_right + xs_noise_right_alm)
+
+            elif 'cluster' in self.train_type: # Cluster but no switch
+
+                if 'balanced' in self.train_type:
+                    signal_balance = self.l_num_cluster / self.r_num_cluster if self.l_num_cluster > self.r_num_cluster else self.r_num_cluster / self.l_num_cluster
+                    # print('balancing signals by factor of', signal_balance)
+                    if self.l_num_cluster > self.r_num_cluster: # e.g. 4 L vs 2 R
+                        signal_left_alm_amp = self.xs_left_alm_amp 
+                        signal_right_alm_amp = self.xs_right_alm_amp / signal_balance
+                    else:
+                        signal_left_alm_amp = self.xs_left_alm_amp / signal_balance
+                        signal_right_alm_amp = self.xs_right_alm_amp 
+                else:
+                    signal_left_alm_amp = self.xs_left_alm_amp
+                    signal_right_alm_amp = self.xs_right_alm_amp
+
+                signal_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*signal_left_alm_amp + xs_noise_left_alm) 
+                signal_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*signal_right_alm_amp + xs_noise_right_alm)
+                noise_left_alm = self.w_xh_linear_left_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * self.graded_noise_scale) # can increase noise here
+                noise_right_alm = self.w_xh_linear_right_alm(math.sqrt(2/self.a) * torch.randn_like(xs) * self.graded_noise_scale)
+
+                xs_injected_left_alm = noise_left_alm
+                xs_injected_right_alm = noise_right_alm
+
+                # based on the n number of clusters, drop all others (add noise) randomly on each trial, separately for left and right
+                l_trial_clusters=np.random.randint(0, self.l_num_cluster, size=(n_trials))
+                r_trial_clusters=np.random.randint(0, self.r_num_cluster, size=(n_trials))
+
+                for n in range(self.l_num_cluster):
+                    trial_cluster_mask = l_trial_clusters == n
+                    neuron_cluster_mask = self.l_clusters == n
+                    xs_injected_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)] = signal_left_alm[np.ix_(trial_cluster_mask, np.arange(signal_left_alm.shape[1]), neuron_cluster_mask)]
+                
+                for n in range(self.r_num_cluster):
+                    trial_cluster_mask = r_trial_clusters == n
+                    neuron_cluster_mask = self.r_clusters == n
+                    xs_injected_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)] = signal_right_alm[np.ix_(trial_cluster_mask, np.arange(signal_right_alm.shape[1]), neuron_cluster_mask)]
+
+
+            elif 'dropout' in self.train_type:
+                m = nn.Dropout(p=self.dropout_p)
+
+                xs_left_input = xs*xs_left_alm_mask*self.xs_left_alm_amp 
+                xs_left_input = m(xs_left_input)  
+                xs_injected_left_alm = self.w_xh_linear_left_alm(xs_left_input + xs_noise_left_alm)
+                
+                xs_right_input = xs*xs_right_alm_mask*self.xs_right_alm_amp 
+                xs_right_input = m(xs_right_input)  
+                xs_injected_right_alm = self.w_xh_linear_right_alm(xs_right_input + xs_noise_right_alm)
+
+            
+            elif self.corrupt:
+                
+                corr_level = self.corruption_noise
+                if self.one_hot:
+                    # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*(torch.randn_like(xs) + 2.0) # shift the mean of the gaussian to match the mean of the input
+                    xs_noise_left_alm_corr = math.sqrt(2/self.a)*(torch.randn_like(xs)*corr_level + 0.0) 
+
+                elif self.corruption_type == "poisson":
+                    # xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.poisson(torch.ones_like(xs) * corr_level)
+                    xs_noise_left_alm_corr = math.sqrt(2/self.a)*torch.poisson(torch.ones_like(xs.cpu()) * corr_level).to(xs.device)
+
+                else:
+                    xs_noise_left_alm_corr = math.sqrt(2/self.a)*corr_level*torch.randn_like(xs)
+
+                if self.noise:
+
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
+                    # Keep right side unchanged
                     xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
-            else:
-                # No noise test
-                print("No noise")
-                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
-                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
+                else:
+                    xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm_corr)
+                    xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
+
+                # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm_corr)*self.xs_left_alm_amp) # Multiply term outside of everything
+                # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)
+
+
+            else: # regular noise
+                
+                xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp + xs_noise_left_alm)
+                xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp + xs_noise_right_alm)
+        else:
+            # No noise test
+            print("No noise")
+            xs_injected_left_alm = self.w_xh_linear_left_alm(xs*xs_left_alm_mask*self.xs_left_alm_amp)
+            xs_injected_right_alm = self.w_xh_linear_right_alm(xs*xs_right_alm_mask*self.xs_right_alm_amp)
 
             # xs_injected_left_alm = self.w_xh_linear_left_alm((xs*xs_left_alm_mask + xs_noise_left_alm)*self.xs_left_alm_amp) # Multiply term outside of everything
             # xs_injected_right_alm = self.w_xh_linear_right_alm((xs*xs_right_alm_mask + xs_noise_right_alm)*self.xs_right_alm_amp)

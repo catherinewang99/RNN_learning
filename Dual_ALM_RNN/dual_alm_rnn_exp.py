@@ -1468,7 +1468,7 @@ class DualALMRNNExp(object):
 
         left_input_weights = model.w_xh_linear_left_alm.weight.data.cpu().numpy()
         right_input_weights = model.w_xh_linear_right_alm.weight.data.cpu().numpy()
-        # For left ALM readout (maps left ALM hidden units to output)
+        # For both ALM readout (maps left ALM hidden units to output)
         readout_weights = model.readout_linear.weight.data.cpu().numpy()  # shape: (n_left_neurons,)
 
 
@@ -1527,28 +1527,6 @@ class DualALMRNNExp(object):
                 else:
                     if 'switch' in train_type: # Switch between giving left and right ALM no input (just noise)
 
-                        # Switch every few epochs regime
-
-                        # switch_epoch_n = self.configs['switch_epoch_n']
-                        # print(f'switch the L/R input every {switch_epoch_n} epochs')
-                        # if epoch == 0: # Start by training right ALM
-                        #     model.xs_left_alm_amp = 0
-                        #     model.xs_right_alm_amp = 1
-                        #     train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct) # Per each training batch. 
-                        # elif epoch % switch_epoch_n == 0:
-                        #     if model.xs_left_alm_amp == 0:
-                        #         print('Switch to train left ALM')
-                        #         model.xs_left_alm_amp = 1
-                        #         model.xs_right_alm_amp = 0
-                        #         train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_righttoleft, epoch, loss_fct)
-
-                        #     elif model.xs_right_alm_amp == 0:
-                        #         print('Switch to train right ALM')
-                        #         model.xs_left_alm_amp = 0
-                        #         model.xs_right_alm_amp = 1
-                        #         train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi_and_lefttoright, epoch, loss_fct)
-
-
                         # train all trial types all the time
                         print("Switch input seen by hemispheres, interleave trials")
 
@@ -1562,9 +1540,7 @@ class DualALMRNNExp(object):
             
             else:
                 train_losses, train_scores = self.train_helper(model, device, train_loader, optimizer_within_hemi, epoch, loss_fct) # Per each training batch. do we train all the weights or just set to perfect?
-            # total_hs, _ = self.get_neurons_trace(model, device, train_loader, model_type, hemi_type='both', return_pred_labels=False, hemi_agree=False, corrupt=False)
-            # np.save(os.path.join(logs_save_path, 'all_hs_single_readout_epoch_{}.npy'.format(epoch)), total_hs)
-              # After optimizer.step() and epoch ends
+
 
             print("Evaluating...")
             val_results = self.eval_with_perturbations(
@@ -1781,64 +1757,110 @@ class DualALMRNNExp(object):
 
         return losses, scores
 
+
+
     def _update_model_parameters(self, model_copy, params):
-        for name, param in params.items():
-            if 'readout_linear.bias' in name:
-                model_copy.readout_linear.bias.data = param
-            elif 'readout_linear.weight' in name:
-                model_copy.readout_linear.weight.data = param
-            elif 'w_hh_linear_ll.weight' in name:
-                model_copy.rnn_cell.w_hh_linear_ll.weight.data = param
-            elif 'w_hh_linear_rr.weight' in name:
-                model_copy.rnn_cell.w_hh_linear_rr.weight.data = param
-            elif 'w_hh_linear_lr.weight' in name:
-                model_copy.rnn_cell.w_hh_linear_lr.weight.data = param
-            elif 'w_hh_linear_rl.weight' in name:
-                model_copy.rnn_cell.w_hh_linear_rl.weight.data = param
-            elif 'w_hh_linear_ll.bias' in name:
-                model_copy.rnn_cell.w_hh_linear_ll.bias.data = param
-            elif 'w_hh_linear_rr.bias' in name:
-                model_copy.rnn_cell.w_hh_linear_rr.bias.data = param
-            elif 'w_hh_linear_lr.bias' in name:
-                model_copy.rnn_cell.w_hh_linear_lr.bias.data = param
-            elif 'w_hh_linear_rl.bias' in name:
-                model_copy.rnn_cell.w_hh_linear_rl.bias.data = param
+        """
+        Copy parameter values from `params` into the corresponding submodules of `model_copy`.
+        """
+        import torch
+
+        with torch.no_grad():
+            for name, param in params.items():
+                # Use tensor view (no grads) for copying
+                param_data = param.detach()
+
+                if 'readout_linear.bias' in name:
+                    model_copy.readout_linear.bias.copy_(param_data)
+                elif 'readout_linear.weight' in name:
+                    model_copy.readout_linear.weight.copy_(param_data)
+                elif 'w_hh_linear_ll.weight' in name:
+                    model_copy.rnn_cell.w_hh_linear_ll.weight.copy_(param_data)
+                elif 'w_hh_linear_rr.weight' in name:
+                    model_copy.rnn_cell.w_hh_linear_rr.weight.copy_(param_data)
+                elif 'w_hh_linear_lr.weight' in name:
+                    model_copy.rnn_cell.w_hh_linear_lr.weight.copy_(param_data)
+                elif 'w_hh_linear_rl.weight' in name:
+                    model_copy.rnn_cell.w_hh_linear_rl.weight.copy_(param_data)
+                elif 'w_hh_linear_ll.bias' in name:
+                    model_copy.rnn_cell.w_hh_linear_ll.bias.copy_(param_data)
+                elif 'w_hh_linear_rr.bias' in name:
+                    model_copy.rnn_cell.w_hh_linear_rr.bias.copy_(param_data)
+                elif 'w_hh_linear_lr.bias' in name:
+                    model_copy.rnn_cell.w_hh_linear_lr.bias.copy_(param_data)
+                elif 'w_hh_linear_rl.bias' in name:
+                    model_copy.rnn_cell.w_hh_linear_rl.bias.copy_(param_data)
+
         return model_copy
+
+    # def _compute_loss_for_batch(self, model, params, inputs, labels, loss_fct):
+    #     """
+    #     Helper function to compute loss for a given batch.
+    #     Used in zero-order optimization to evaluate loss at perturbed parameter values.
+    #     """
+    #     # Copy the model using deepcopy to preserve all attributes and state
+    #     import copy
+    #     model_copy = copy.deepcopy(model)
+    #     model_copy.to(next(model.parameters()).device)
+    #     model_copy.eval()
+
+    #     model_copy = self._update_model_parameters(model_copy, params)
+
+    #     with torch.no_grad():
+    #         hs, zs = model_copy(inputs)
+            
+    #         assert self.T == inputs.shape[1]
+    #         dec_begin = self.delay_begin
+            
+    #         # use a single readout model
+    #         if 'single_readout' in self.configs['model_type']:
+    #             # For single readout, zs is (n_trials, T, 1)
+    #             loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))
+    #         else:
+    #             # BCEWithLogitsLoss requires that the target be float between 0 and 1.
+    #             loss_left_alm = loss_fct(zs[:,dec_begin:,0], labels.float()[:,None].expand(-1,self.T-dec_begin))
+    #             loss_right_alm = loss_fct(zs[:,dec_begin:,1], labels.float()[:,None].expand(-1,self.T-dec_begin))
+    #             loss = loss_left_alm + loss_right_alm
+            
+    #         return loss.item()
 
     def _compute_loss_for_batch(self, model, params, inputs, labels, loss_fct):
         """
         Helper function to compute loss for a given batch.
         Used in zero-order optimization to evaluate loss at perturbed parameter values.
-        """
-        # Copy the model using deepcopy to preserve all attributes and state
-        import copy
-        model_copy = copy.deepcopy(model)
-        model_copy.to(next(model.parameters()).device)
-        model_copy.eval()
 
-        model_copy = self._update_model_parameters(model_copy, params)
+        Assumes `model` already has the desired (possibly perturbed) parameters.
+        """
+        model.eval()                
 
         with torch.no_grad():
-            hs, zs = model_copy(inputs)
-            
+            hs, zs = model(inputs)
+
             assert self.T == inputs.shape[1]
             dec_begin = self.delay_begin
-            
+
             # use a single readout model
             if 'single_readout' in self.configs['model_type']:
-                # For single readout, zs is (n_trials, T, 1)
-                loss = loss_fct(zs[:,dec_begin:,-1].squeeze(-1), labels.float()[:,None].expand(-1,self.T-dec_begin))
+                # zs: (n_trials, T, 1)
+                # target: broadcast labels over time dimension
+                target = labels.float()[:, None].expand(-1, self.T - dec_begin)
+                logits = zs[:, dec_begin:, -1]  # (n_trials, T-dec_begin)
+                loss = loss_fct(logits, target)
             else:
-                # BCEWithLogitsLoss requires that the target be float between 0 and 1.
-                loss_left_alm = loss_fct(zs[:,dec_begin:,0], labels.float()[:,None].expand(-1,self.T-dec_begin))
-                loss_right_alm = loss_fct(zs[:,dec_begin:,1], labels.float()[:,None].expand(-1,self.T-dec_begin))
+                # two readouts: left and right ALM
+                target = labels.float()[:, None].expand(-1, self.T - dec_begin)
+                logits_left = zs[:, dec_begin:, 0]
+                logits_right = zs[:, dec_begin:, 1]
+
+                loss_left_alm = loss_fct(logits_left, target)
+                loss_right_alm = loss_fct(logits_right, target)
                 loss = loss_left_alm + loss_right_alm
-            
+
             return loss.item()
 
-
     def train_helper_no_grad(self, model, device, train_loader, epoch, loss_fct, 
-                             params_update, perturbation_magnitude=1e-3, learning_rate=None):
+                             params_update, perturbation_magnitude=1e-3, learning_rate=None,
+                             inner_steps = 15):
         """
         Zero-order optimization training using Duchi's two-point feedback method.
         
@@ -1861,11 +1883,14 @@ class DualALMRNNExp(object):
 
         begin_time = time.time()
         
-        # Use learning rate from config if not provided
+        # # Use learning rate from config if not provided
         if learning_rate is None:
             learning_rate = self.configs['lr']
         
-        # Zero-order optimization: Duchi's two-point feedback method
+ 
+        # Total dimension d of the parameter vector (for optional scaling)
+        d = sum(p.numel() for p in params_update.values())
+
         for batch_idx, data in enumerate(train_loader):
 
             inputs, labels = data
@@ -1873,51 +1898,78 @@ class DualALMRNNExp(object):
 
             trial_count += len(labels)
 
-            # ===== ZERO-ORDER OPTIMIZATION ALGORITHM =====
-            # Step 1: Save current parameter values
-            # current_params = [param.data.clone() for param in params_update]
-            current_params = {name: param.data.clone() for name, param in params_update.items()}
+            # ===== perform multiple zero-order updates on this batch =====
+            for inner in range(inner_steps):
 
-            # Step 2: Generate random direction vectors u for each parameter
-            # Sample from standard normal and normalize to unit sphere (as per Duchi's method)
-            direction_vectors = {}
-            for name, param in params_update.items():
-                u = torch.randn_like(param.data)
-                # Normalize to unit sphere: u / ||u||
-                if param.data.shape[0] > 1:
+                # Step 1: snapshot current parameters
+                current_params = {name: param.detach().clone()
+                                for name, param in params_update.items()}
+
+                # Step 2: sample direction vectors
+                direction_vectors = {}
+                for name, param in params_update.items():
+                    u = torch.randn_like(param)
                     u_norm = u.norm()
                     if u_norm > 0:
                         u = u / u_norm
-                direction_vectors[name] = u
-            
-            # Step 3: Evaluate loss at θ + δu
-            with torch.no_grad():
-                for name, param in params_update.items():
-                    param.data = current_params[name] + perturbation_magnitude * direction_vectors[name]
+                    direction_vectors[name] = u
 
-            loss_plus = self._compute_loss_for_batch(model, params_update, inputs, labels, loss_fct)
-            
-            # Step 4: Evaluate loss at θ - δu
-            with torch.no_grad():
-                for name, param in params_update.items():
-                    param.data = current_params[name] - perturbation_magnitude * direction_vectors[name]
-            
-            loss_minus = self._compute_loss_for_batch(model, params_update, inputs, labels, loss_fct)
+                # Step 3: loss at θ + δu
+                with torch.no_grad():
+                    for name, param in params_update.items():
+                        param.copy_(current_params[name] + perturbation_magnitude * direction_vectors[name])
+                loss_plus = self._compute_loss_for_batch(model, params_update, inputs, labels, loss_fct)
 
-            # Step 5: Compute gradient estimate: ĝ = (f(θ+δu) - f(θ-δu)) / (2δ) * u
-            # Step 6: Update parameters: θ = θ - η * ĝ
-            with torch.no_grad():
-                for name, param in params_update.items():
-                    # Gradient estimate
-                    grad_estimate = ((loss_plus - loss_minus) / (2 * perturbation_magnitude)) * direction_vectors[name]
-                    # Parameter update
-                    param.data = current_params[name] - learning_rate * grad_estimate
+                # Step 4: loss at θ - δu
+                with torch.no_grad():
+                    for name, param in params_update.items():
+                        param.copy_(current_params[name] - perturbation_magnitude * direction_vectors[name])
+                loss_minus = self._compute_loss_for_batch(model, params_update, inputs, labels, loss_fct)
+
+                # Step 5: gradient estimate scale
+                coeff = (loss_plus - loss_minus) / (2.0 * perturbation_magnitude)
+                coeff = coeff * d  # if you kept the dimension scaling
+
+                # ===== Step 6: Projected Euclidean MD update =====
+                with torch.no_grad():
+                    for name, param in params_update.items():
+                        # Gradient estimate in direction u
+                        grad_estimate = coeff * direction_vectors[name]
+
+                        # Unconstrained step: θ̃ = θ_t - η ĝ_t
+                        new_param = current_params[name] - learning_rate * grad_estimate
+
+                        # --- Euclidean projection onto an L2 ball ---
+                        # You can tune these radii or pull from self.configs
+                        if 'w_hh_' in name:
+                            # recurrent weights: tighter radius
+                            R = self.configs.get('recurrent_radius', 1.0)
+                        elif 'readout_linear' in name:
+                            # readout weights: looser radius
+                            R = self.configs.get('readout_radius', 5.0)
+                        else:
+                            # fallback radius for any other params you might add later
+                            R = self.configs.get('default_radius', 5.0)
+
+                        # Project new_param onto L2 ball of radius R (per tensor)
+                        flat = new_param.view(-1)
+                        norm = flat.norm()
+                        if norm > R:
+                            flat = flat * (R / norm)
+                            new_param = flat.view_as(new_param)
+
+                        # Write back projected parameter
+                        param.copy_(new_param)
+
+                # after this inner step, params_update (and model) are updated;
+                # next inner step will snapshot from this new point
+            # ===== end inner_steps loop =====
+
             # ===== END ZERO-ORDER OPTIMIZATION =====
 
-            # Evaluate the model with updated parameters for logging
-            model = self._update_model_parameters(model, params_update)
 
-            # Update parameters
+            # Evaluate the model with updated parameters for logging
+            model.eval()
             with torch.no_grad():
                 hs, zs = model(inputs)
                 
