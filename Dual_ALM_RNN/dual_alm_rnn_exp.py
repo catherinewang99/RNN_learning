@@ -1859,7 +1859,7 @@ class DualALMRNNExp(object):
             return loss.item()
 
     def train_helper_no_grad(self, model, device, train_loader, epoch, loss_fct, 
-                             params_update, perturbation_magnitude=1e-3, learning_rate=None,
+                             params_update, perturbation_magnitude=1e-5, learning_rate=None,
                              inner_steps = 15):
         """
         Zero-order optimization training using Duchi's two-point feedback method.
